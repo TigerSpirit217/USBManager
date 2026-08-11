@@ -1,0 +1,32 @@
+<resources>
+    <!-- Page background -->
+    <color name="bg_page">#FFF6F7F8</color>
+    <!-- Card / toolbar background -->
+    <color name="bg_card">#FFFFFFFF</color>
+    <!-- Primary text -->
+    <color name="text_primary">#FF18191C</color>
+    <!-- Secondary text -->
+    <color name="text_secondary">#FF666666</color>
+    <!-- Tertiary / hint text -->
+    <color name="text_tertiary">#FF888888</color>
+    <!-- Body text -->
+    <color name="text_body">#FF333333</color>
+    <!-- Subtitle text -->
+    <color name="text_subtitle">#FF222222</color>
+    <!-- Accent / link color -->
+    <color name="accent">#FF1565C0</color>
+    <!-- Activation: active (green) -->
+    <color name="banner_active_bg">#FFE8F5E9</color>
+    <color name="banner_active_text">#FF2E7D32</color>
+    <!-- Activation: inactive (red) -->
+    <color name="banner_inactive_bg">#FFEBEE</color>
+    <color name="banner_inactive_text">#FFC62828</color>
+    <!-- Activation: unknown (blue) -->
+    <color name="banner_unknown_bg">#FFE3F2FD</color>
+    <color name="banner_unknown_text">#FF1565C0</color>
+    <!-- Activation: loading (amber) -->
+    <color name="banner_loading_bg">#FFFFF8E1</color>
+    <color name="banner_loading_text">#FF8D6E63</color>
+    <!-- Log viewer text -->
+    <color name="log_text">#FF222222</color>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Default suggested LSPosed scope for this module.
+
+        The module targets the "android" package only (the system_server process),
+        because that is where com.android.server.usb.UsbDeviceManager and the ADB
+        services live. Users can add extra packages via LSPosed Manager if they
+        want to debug hooks elsewhere, but the only entry that actually does
+        anything useful is "android".
+    -->
+    <string-array name="xposed_scope">
+        <item>android</item>
+    </string-array>
+</resources>

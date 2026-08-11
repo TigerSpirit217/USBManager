@@ -1,0 +1,14 @@
+<resources>
+    <style name="Theme.USBManager" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">@color/accent</item>
+        <item name="android:colorPrimaryDark">@color/accent</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/bg_page</item>
+    </style>
+
+    <style name="Theme.USBManager.Dialog" parent="android:Theme.Material.Dialog">
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+</resources>

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-sdk tools:overrideLibrary="io.github.libxposed.service,io.github.libxposed.service.interfaces" />
+
+    <!--
+        Custom permission guarding bridge traffic between the module app UI and the
+        system_server hook receiver. Signature protection means only apps signed with
+        the same key as this module can send broadcasts protected by it.
+    -->
+    <permission
+        android:name="com.tiger.usbmanager.permission.BRIDGE"
+        android:protectionLevel="signature" />
+
+    <uses-permission android:name="com.tiger.usbmanager.permission.BRIDGE" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <application
+        android:name=".UsbManagerApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:description="@string/xposed_description"
+        android:theme="@style/Theme.USBManager"
+        tools:targetApi="37">
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Chooser dialog launched by the system_server hook when a USB host connects
+            and a user decision is required. Exported so system_server (uid 1000) can
+            start it across the process boundary.
+        -->
+        <activity
+            android:name=".ui.UsbChooserActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.USBManager.Dialog" />
+
+        <!--
+            Single source of truth for the known-host database. system_server queries
+            it via ContentResolver to resolve policy synchronously when USB connects.
+            Guarded by the signature BRIDGE permission so only this module (and the
+            system uid) can reach it.
+        -->
+        <provider
+            android:name=".bridge.HostProvider"
+            android:authorities="com.tiger.usbmanager.hosts"
+            android:exported="true"
+            android:grantUriPermissions="false"
+            android:permission="com.tiger.usbmanager.permission.BRIDGE" />
+
+    </application>
+
+</manifest>

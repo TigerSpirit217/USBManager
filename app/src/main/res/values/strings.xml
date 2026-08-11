@@ -1,0 +1,48 @@
+<resources>
+    <string name="app_name">USB 管理器</string>
+    <string name="xposed_description">基于 libxposed API 102 的 USB 智能管理模块，Hook system_server 实现 USB 模式自动选择、ADB 自动开关与可信电脑记忆。</string>
+
+    <!-- MainActivity intro -->
+    <string name="intro_module_info">当前版本：%1$s</string>
+    <string name="intro_start">开始使用</string>
+
+    <!-- MainActivity config manager -->
+    <string name="settings_view_intro">使用说明</string>
+    <string name="settings_saved_hosts">已保存设备</string>
+    <string name="settings_module_settings">模块设置</string>
+    <string name="settings_empty">暂无已保存设备。下次连接未知电脑并勾选"记住此电脑"后会出现在这里。</string>
+    <string name="settings_clear_all">清空全部</string>
+    <string name="settings_clear_confirm">确认清空所有已保存的设备？此操作不可撤销。</string>
+    <string name="settings_cleared">已清空全部设备</string>
+    <string name="settings_default_mode">未知电脑默认模式</string>
+    <string name="settings_default_adb">未知电脑默认开启 ADB</string>
+    <string name="settings_disconnect_auto_off">拔线自动关闭 ADB</string>
+    <string name="settings_edit">编辑</string>
+    <string name="settings_delete">删除</string>
+    <string name="settings_deleted">已删除</string>
+    <string name="settings_saved">已保存</string>
+    <string name="settings_auto_label">自动应用</string>
+
+    <!-- UsbChooserActivity -->
+    <string name="chooser_title">USB 连接</string>
+    <string name="chooser_host_label">当前电脑：%1$s</string>
+    <string name="chooser_host_unknown">未识别电脑</string>
+    <string name="chooser_mode_charging">仅充电</string>
+    <string name="chooser_mode_mtp">文件传输 (MTP)</string>
+    <string name="chooser_mode_ptp">图片传输 (PTP)</string>
+    <string name="chooser_mode_rndis">USB 网络共享 (RNDIS)</string>
+    <string name="chooser_mode_midi">MIDI</string>
+    <string name="chooser_adb">开启 USB 调试</string>
+    <string name="chooser_remember">记住此电脑</string>
+    <string name="chooser_cancel">取消</string>
+    <string name="chooser_confirm">确定</string>
+    <string name="chooser_name_hint">为这台电脑命名（可选）</string>
+
+    <string name="dialog_confirm">确定</string>
+    <string name="dialog_cancel">取消</string>
+    <string name="dialog_close">关闭</string>
+
+    <!-- Logs -->
+    <string name="settings_view_logs">查看运行日志</string>
+    <string name="settings_no_logs">暂无日志文件</string>
+</resources>
