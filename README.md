@@ -109,4 +109,5 @@ A: 模块维护 APP 数据库和 system_server 本地缓存双副本，修改后
 
 ## 许可证
 
-本项目基于 [Apache License 2.0](LICENSE) 开源。
+本项目使用木兰公共许可证，第 2 版（Mulan PubL v2）。
+完整授权见 [LICENSE](https://license.coscl.org.cn/MulanPubL-2.0)。
