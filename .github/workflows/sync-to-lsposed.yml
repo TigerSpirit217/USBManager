@@ -1,0 +1,213 @@
+name: Sync to LSPosed Repo
+
+on:
+  # README / LICENSE 变更时触发
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "LICENSE"
+
+  # 手动发布 Release 时触发
+  release:
+    types: [published, edited]
+
+  # 手动触发（补漏 / 全量同步）
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "同步内容"
+        required: true
+        type: choice
+        options:
+          - all
+          - readme
+          - release
+      tag:
+        description: "指定 Release tag（留空=最新）"
+        required: false
+        default: ""
+
+env:
+  LSPOSED_REPO: "Xposed-Modules-Repo/com.tiger.usbmanager"
+  PAT: ${{ secrets.LSPOSED_SYNC_TOKEN }}
+
+jobs:
+  # ═══════════════════════════════════════
+  #  Job 1: 同步 README + LICENSE
+  # ═══════════════════════════════════════
+  sync-docs:
+    if: |
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.action == 'all' || github.event.inputs.action == 'readme') ||
+      github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Sync files via Contents API
+        run: |
+          for FILE in README.md LICENSE; do
+            [ ! -f "$FILE" ] && echo "⚠️ $FILE 不存在，跳过" && continue
+
+            CONTENT_B64=$(base64 -w 0 "$FILE")
+
+            # 获取目标仓库当前文件的 SHA（用于更新）
+            EXISTING=$(curl -sf \
+              -H "Authorization: Bearer $PAT" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$LSPOSED_REPO/contents/$FILE" 2>/dev/null || echo "")
+
+            SHA=$(echo "$EXISTING" | jq -r '.sha // empty')
+
+            # 比较内容是否相同
+            if [ -n "$SHA" ]; then
+              REMOTE_B64=$(echo "$EXISTING" | jq -r '.content' | tr -d '\n')
+              if [ "$CONTENT_B64" = "$REMOTE_B64" ]; then
+                echo "✅ $FILE 无变化，跳过"
+                continue
+              fi
+            fi
+
+            # 构建请求体
+            BODY=$(jq -n \
+              --arg msg "docs: sync $FILE from source ($(date -u +%Y-%m-%dT%H:%M:%SZ))" \
+              --arg content "$CONTENT_B64" \
+              --arg sha "$SHA" \
+              '{message: $msg, content: $content} + (if $sha != "" then {sha: $sha} else {} end)')
+
+            HTTP_CODE=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X PUT \
+              -H "Authorization: Bearer $PAT" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$LSPOSED_REPO/contents/$FILE" \
+              -d "$BODY")
+
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+              echo "✅ $FILE 已同步 (HTTP $HTTP_CODE)"
+            else
+              echo "❌ $FILE 同步失败 (HTTP $HTTP_CODE)"
+              cat /tmp/resp.json | jq .
+              exit 1
+            fi
+          done
+
+  # ═══════════════════════════════════════
+  #  Job 2: 同步 Release + APK
+  # ═══════════════════════════════════════
+  sync-release:
+    if: |
+      github.event_name == 'release' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.action == 'all' || github.event.inputs.action == 'release'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release info
+        id: resolve
+        run: |
+          SRC_REPO="${{ github.repository }}"
+
+          TAG="${{ github.event.inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${{ github.event.release.tag_name }}"
+
+          if [ -z "$TAG" ]; then
+            API="https://api.github.com/repos/$SRC_REPO/releases/latest"
+          else
+            API="https://api.github.com/repos/$SRC_REPO/releases/tags/$TAG"
+          fi
+
+          RESP=$(curl -sf "$API") || { echo "::error::获取源 Release 失败"; exit 1; }
+
+          TAG_NAME=$(echo "$RESP" | jq -r '.tag_name')
+          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "name=$(echo "$RESP" | jq -r '.name // empty')" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$(echo "$RESP" | jq -r '.prerelease')" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "body<<EOF_BODY"
+            echo "$RESP" | jq -r '.body // ""'
+            echo "EOF_BODY"
+          } >> "$GITHUB_OUTPUT"
+
+          # 提取 APK/ZIP 下载链接
+          echo "$RESP" | jq -r \
+            '.assets[] | select(.name | test("\\.(apk|zip)$")) | "\(.browser_download_url)|\(.name)"' \
+            > assets_list.txt
+
+          echo "📦 源 Release: $TAG_NAME"
+          cat assets_list.txt
+
+      - name: Check duplicate
+        id: dup
+        run: |
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$LSPOSED_REPO/releases/tags/${{ steps.resolve.outputs.tag }}")
+
+          EXISTS=false
+          [ "$CODE" = "200" ] && EXISTS=true
+          echo "exists=$EXISTS" >> "$GITHUB_OUTPUT"
+          echo "重复检查: ${{ steps.resolve.outputs.tag }} → exists=$EXISTS"
+
+      - name: Download assets
+        if: steps.dup.outputs.exists == 'false'
+        run: |
+          mkdir -p artifacts
+          while IFS='|' read -r url filename; do
+            [ -z "$url" ] && continue
+            echo "⬇️  下载 $filename ..."
+            curl -fSL --retry 3 -o "artifacts/$filename" "$url"
+          done < assets_list.txt
+          ls -lh artifacts/
+
+      - name: Create Release on LSPosed repo
+        if: steps.dup.outputs.exists == 'false'
+        run: |
+          # Step 1: 创建 Release（不含 asset）
+          BODY=$(jq -n \
+            --arg tag "${{ steps.resolve.outputs.tag }}" \
+            --arg name "${{ steps.resolve.outputs.name }}" \
+            --arg body "${{ steps.resolve.outputs.body }}" \
+            --argjson pre ${{ steps.resolve.outputs.prerelease }} \
+            '{tag_name: $tag, name: $name, body: $body, draft: false, prerelease: $pre}')
+
+          RESP=$(curl -sf -X POST \
+            -H "Authorization: Bearer $PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$LSPOSED_REPO/releases" \
+            -d "$BODY")
+
+          UPLOAD_URL=$(echo "$RESP" | jq -r '.upload_url' | sed 's/{?name,label}//')
+          RELEASE_ID=$(echo "$RESP" | jq -r '.id')
+
+          if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
+            echo "::error::创建 Release 失败"
+            echo "$RESP" | jq .
+            exit 1
+          fi
+
+          echo "✅ Release 已创建 (ID: $RELEASE_ID)"
+
+          # Step 2: 逐个上传 Asset
+          for FILE in artifacts/*; do
+            [ ! -f "$FILE" ] && continue
+            FNAME=$(basename "$FILE")
+            echo "⬆️  上传 $FNAME ..."
+
+            HTTP_CODE=$(curl -s -o /tmp/upload_resp.json -w "%{http_code}" -X POST \
+              -H "Authorization: Bearer $PAT" \
+              -H "Content-Type: application/octet-stream" \
+              "$UPLOAD_URL?name=$FNAME" \
+              --data-binary "@$FILE")
+
+            if [ "$HTTP_CODE" = "201" ]; then
+              echo "   ✅ $FNAME 上传成功"
+            else
+              echo "   ❌ $FNAME 上传失败 (HTTP $HTTP_CODE)"
+              cat /tmp/upload_resp.json | jq .
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "🎉 同步完成！"
+          echo "   https://github.com/$LSPOSED_REPO/releases/tag/${{ steps.resolve.outputs.tag }}"
