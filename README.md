@@ -111,3 +111,8 @@ A: 模块维护 APP 数据库和 system_server 本地缓存双副本，修改后
 
 本项目使用木兰公共许可证，第 2 版（Mulan PubL v2）。
 完整授权见 [LICENSE](https://license.coscl.org.cn/MulanPubL-2.0)。
+
+## 源码与发布
+- 源码仓库：https://github.com/TigerSpirit217/USBManager
+- 发布页面：https://github.com/TigerSpirit217/USBManager/releases
+- 反馈Issues：https://github.com/TigerSpirit217/USBManager/issues
