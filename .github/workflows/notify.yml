@@ -1,0 +1,46 @@
+name: Notify LSPosed Sync
+
+on:
+  # README / LICENSE 有 push 变更
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "LICENSE"
+
+  # 你手动创建 Release（上传 APK 后点 Publish）
+  release:
+    types: [published, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine action
+        id: action
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "type=sync-release" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=sync-readme" >> "$GITHUB_OUTPUT"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send dispatch to LSPosed repo
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${{ secrets.LSPOSED_SYNC_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/lsposed/USBManager/dispatches" \
+            -d '{
+              "event_type": "${{ steps.action.outputs.type }}",
+              "client_payload": {
+                "action": "${{ steps.action.outputs.type }}",
+                "tag": "${{ steps.action.outputs.tag }}"
+              }
+            }'
+          echo "✅ 已通知 LSPosed 仓库"
