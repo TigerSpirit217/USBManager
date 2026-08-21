@@ -22,7 +22,7 @@
 ### 步骤
 
 1. 从 [Releases](../../releases) 下载最新 APK
-2. 安装 APK 到设备：`adb install USBManager-vX.Y.Z-release.apk`
+2. 安装 APK 到设备
 3. 打开 **LSPosed Manager** → 模块列表 → 勾选 **USBManager**
 4. **作用域**：勾选 `system`（系统框架）
 5. 重启 System UI 或重启设备
