@@ -3,7 +3,7 @@ name: Sync to LSPosed Repo
 on:
   # README / LICENSE 变更时触发
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - "README.md"
       - "LICENSE"
