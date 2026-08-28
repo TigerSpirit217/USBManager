@@ -7,7 +7,6 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import com.google.gson.Gson
 import com.tiger.usbmanager.ModuleConstants
 import com.tiger.usbmanager.ModuleSettings
 import com.tiger.usbmanager.policy.HostInfo
@@ -27,7 +26,7 @@ import com.tiger.usbmanager.policy.UsbMode
 class HostProvider : ContentProvider() {
 
     private lateinit var store: HostStore
-    private val gson = Gson()
+    private val gson = UsbBridgeContract.GSON
 
     /** In-memory pending apply (written by chooser UI, polled by system_server watcher).
      *  Volatile so binder thread reads are visible; single slot because there is at
@@ -43,6 +42,23 @@ class HostProvider : ContentProvider() {
 
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
         return runCatching {
+            // Mutating operations require the shared BRIDGE_TOKEN in extras. Analogous
+            // to the broadcast receiver: the provider is exported (system_server can't
+            // hold a module signature permission), so writes are gated by the token
+            // while read-only queries remain open.
+            when (method) {
+                UsbBridgeContract.METHOD_SAVE_HOST,
+                UsbBridgeContract.METHOD_DELETE_HOST,
+                UsbBridgeContract.METHOD_PUT_PENDING_APPLY,
+                UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY,
+                -> {
+                    val tok = extras?.getString(UsbBridgeContract.KEY_BRIDGE_TOKEN)
+                    if (tok != ModuleConstants.BRIDGE_TOKEN) {
+                        Log.w(TAG, "call($method) blocked: bridge-token mismatch")
+                        return@runCatching null
+                    }
+                }
+            }
             when (method) {
                 UsbBridgeContract.METHOD_GET_HOST -> handleGetHost(arg)
                 UsbBridgeContract.METHOD_LIST_HOSTS -> handleListHosts()
@@ -55,7 +71,7 @@ class HostProvider : ContentProvider() {
                 else -> null
             }
         }.onFailure {
-            Log.w("HostProvider", "call($method) failed", it)
+            Log.w(TAG, "call($method) failed", it)
         }.getOrNull()
     }
 

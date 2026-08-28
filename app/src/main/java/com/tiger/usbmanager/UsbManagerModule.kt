@@ -31,19 +31,15 @@ class UsbManagerModule : XposedModule() {
         val processName = runCatching { param.getProcessName() }.getOrDefault("")
         mlog(Log.INFO, "[MODULE] onModuleLoaded OK; processName=$processName framework=$frameworkName v$frameworkVersionCode api=$apiVersion")
 
-        // When LSPosed loads us into system_server, also set a system property
-        // so the module app UI can confirm activation by checking
-        // `persist.sys.usbmanager.active`. android.os.SystemProperties is a
-        // hidden API so we use reflection.
-        runCatching {
-            val cls = Class.forName("android.os.SystemProperties")
-            val setMethod = cls.getDeclaredMethod("set", String::class.java, String::class.java)
-            setMethod.isAccessible = true
-            setMethod.invoke(null, PROP_ACTIVE, "1")
-            mlog(Log.INFO, "[MODULE] set $PROP_ACTIVE=1")
-        }.onFailure { t ->
-            mlog(Log.WARN, "[MODULE] Failed to set $PROP_ACTIVE", t)
-        }
+        // NOTE: we intentionally do NOT set PROP_ACTIVE here. onModuleLoaded only
+        // proves the module dex was injected into *some* scoped process — the hooks
+        // inside system_server may still fail to install. Signalling "active" too
+        // early (or relying on a stale persist property left over from a previous
+        // boot) is exactly the "UI reports active but the module isn't working" bug.
+        // The property is instead set in onSystemServerStarting ONLY after
+        // SystemServerHooks install has been confirmed, and a non-persist `sys.*`
+        // name is used so the stale value is cleared on reboot when the module is
+        // no longer injected into system_server.
     }
 
     override fun onSystemServerStarting(param: SystemServerStartingParam) {
@@ -65,31 +61,37 @@ class UsbManagerModule : XposedModule() {
 
         // -----------------------------------------------------------------
         // EARLY: grab the system Context via ActivityThread.currentActivityThread()
-        //   → getSystemContext() and boot the file logger before any hook install.
-        //   This guarantees ss_*.log exists even if Application.attach never fires
-        //   (which appears to be the case on Nothing Android 16) or SystemServerHooks
-        //   crashes before calling our own onContextReady path.
+        //   → getSystemContext(). This guarantees onContextReady can bootstrap even
+        //   if Application.attach never fires (which appears to be the case on
+        //   Nothing Android 16) or SystemServerHooks crashes before calling our
+        //   own onContextReady path.
         // -----------------------------------------------------------------
         val earlyContext = runCatching { resolveSystemContextViaActivityThread() }.getOrNull()
         mlog(Log.INFO, "[MODULE] ActivityThread.earlyContext = ${if (earlyContext == null) "FAIL" else "OK: " + earlyContext.javaClass.name + " pkg=" + runCatching { earlyContext.packageName }.getOrDefault("?")}")
-        if (earlyContext != null) {
-            runCatching {
-                val sslogCls = Class.forName("com.tiger.usbmanager.hook.SystemServerLogger", true, this@UsbManagerModule.javaClass.classLoader)
-                val initMethod = sslogCls.getDeclaredMethod("init", Context::class.java)
-                initMethod.isAccessible = true
-                initMethod.invoke(null, earlyContext)
-                mlog(Log.INFO, "[MODULE] SystemServerLogger.init(earlyContext) called OK")
-            }.onFailure { t ->
-                mlog(Log.ERROR, "[MODULE] SystemServerLogger.init via reflection FAILED", t)
-            }
-        }
 
-        installHooksReflectively(
+        val installedOk = installHooksReflectively(
             xposed = this,
             systemLoader = systemServerClassLoader,
             moduleLoader = this@UsbManagerModule.javaClass.classLoader,
             earlyContext = earlyContext,
         )
+
+        // Publish the activation signal the module-app UI reads ONLY after a
+        // confirmed hook install. Non-persist name → cleared on reboot, so a boot
+        // without the module injected does not leave a stale "1" behind.
+        if (installedOk) {
+            runCatching {
+                val cls = Class.forName("android.os.SystemProperties")
+                val setMethod = cls.getDeclaredMethod("set", String::class.java, String::class.java)
+                setMethod.isAccessible = true
+                setMethod.invoke(null, PROP_ACTIVE, "1")
+                mlog(Log.INFO, "[MODULE] set $PROP_ACTIVE=1 (hooks installed)")
+            }.onFailure { t ->
+                mlog(Log.WARN, "[MODULE] Failed to set $PROP_ACTIVE", t)
+            }
+        } else {
+            mlog(Log.ERROR, "[MODULE] hooks NOT installed; NOT setting $PROP_ACTIVE=1")
+        }
     }
 
     /**
@@ -131,7 +133,7 @@ class UsbManagerModule : XposedModule() {
         systemLoader: ClassLoader,
         moduleLoader: ClassLoader?,
         earlyContext: Context?,
-    ) {
+    ): Boolean {
         val hooksClassName = "com.tiger.usbmanager.hook.SystemServerHooks"
 
         val hookLoader: ClassLoader = moduleLoader ?: run {
@@ -149,7 +151,7 @@ class UsbManagerModule : XposedModule() {
                     "Module dex not accessible to system_server? (scope/module.prop problem or APK not installed correctly)",
                 t,
             )
-            return
+            return false
         }
         mlog(Log.INFO, "[MODULE] Class.forName OK: $hooksClassName")
 
@@ -164,7 +166,7 @@ class UsbManagerModule : XposedModule() {
             .sortedByDescending { it.parameterTypes.size }
         if (installMethodCandidates.isEmpty()) {
             mlog(Log.ERROR, "[MODULE] REFLECT FAIL: no method named install on $hooksClassName")
-            return
+            return false
         }
 
         val singleton: Any = try {
@@ -177,7 +179,7 @@ class UsbManagerModule : XposedModule() {
                 hooksClass.getDeclaredConstructor().newInstance()
             } catch (t2: Throwable) {
                 mlog(Log.ERROR, "[MODULE] cannot obtain SystemServerHooks instance", t2)
-                return
+                return false
             }
         }
         mlog(Log.INFO, "[MODULE] hooks singleton OK: ${singleton.javaClass.name}")
@@ -200,7 +202,7 @@ class UsbManagerModule : XposedModule() {
                 candidate.invoke(singleton, *args)
                 mlog(Log.INFO, "[MODULE] SystemServerHooks.install() returned OK via candidate " +
                     "${params.size}-arg")
-                return
+                return true
             } catch (tx: Throwable) {
                 lastErr = tx.cause ?: tx
                 mlog(Log.WARN, "[MODULE] ${params.size}-arg candidate FAILED", lastErr)
@@ -209,6 +211,7 @@ class UsbManagerModule : XposedModule() {
         if (lastErr != null) {
             mlog(Log.ERROR, "[MODULE] FATAL: all install() candidates failed", lastErr)
         }
+        return false
     }
 
     /**
@@ -277,6 +280,6 @@ class UsbManagerModule : XposedModule() {
 
     companion object {
         const val LOG_TAG = "USBManager"
-        const val PROP_ACTIVE = "persist.sys.usbmanager.active"
+        const val PROP_ACTIVE = "sys.usbmanager.active"
     }
 }

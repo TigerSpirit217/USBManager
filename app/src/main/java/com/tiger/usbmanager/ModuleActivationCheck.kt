@@ -4,15 +4,18 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import com.tiger.usbmanager.policy.HostStore
 
 /**
  * App-side helper that checks whether the module is active in system_server.
  *
  * Strategy (from most reliable to least):
- *  1. Check the `persist.sys.usbmanager.active` system property — set by
- *     [UsbManagerModule.onModuleLoaded] when it runs inside system_server.
- *     This is the only signal that definitively proves the module dex was
- *     loaded into the system process.
+ *  1. Check the `sys.usbmanager.active` system property — set by
+ *     [UsbManagerModule.onSystemServerStarting] ONLY after the system_server hooks
+ *     are confirmed installed. This is the only signal that proves the hook bundle
+ *     is live; a non-persist `sys.*` name is used so the value is cleared on reboot
+ *     and cannot be left stale by a previous boot when the module was enabled. Without
+ *     the module injected, property stays unset → falls through to LSPosed.
  *  2. Query the LSPosed service ContentProvider (`io.github.libxposed.service`)
  *     to see if LSPosed itself reports this package as an active module with
  *     `android` in scope.
@@ -51,7 +54,10 @@ object ModuleActivationCheck {
                 packageName = ModuleConstants.MODULE_PACKAGE,
                 hasUsbDeviceManagerHook = true,
                 hasAdbHook = true,
-                knownHostCount = 0,
+                // The known-host DB lives in the module-app process, so we can report
+                // the real count here without crossing the process boundary (unlike
+                // activation status, which MUST come from system_server).
+                knownHostCount = HostStore.get(context).list().size,
             )
         }
 
@@ -100,7 +106,7 @@ object ModuleActivationCheck {
     }
 
     private const val TAG = "USBManager"
-    private const val PROP_ACTIVE = "persist.sys.usbmanager.active"
+    private const val PROP_ACTIVE = "sys.usbmanager.active"
 
     /** Reflective accessor for the hidden android.os.SystemProperties.get(key, def). */
     private fun getSystemProperty(key: String, def: String): String {

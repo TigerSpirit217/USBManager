@@ -28,8 +28,8 @@ object ModuleConstants {
     const val ACTION_CHOOSER_CLOSED = "$MODULE_PACKAGE.action.CHOOSER_CLOSED"
 
     /**
-     * Token embedded in every bridge broadcast (app ⇄ system_server) so the
-     * receiver can drop spoofed intents.
+     * Token embedded in every bridge broadcast / provider call (app ⇄ system_server)
+     * so the receiver / provider can drop spoofed traffic.
      *
      * Why a token in the extras instead of a custom permission string:
      *   Custom `signature|privileged` permissions declared in AndroidManifest
@@ -37,9 +37,11 @@ object ModuleConstants {
      * (uid 1000) is signed with the PLATFORM key, not ours, so it would NEVER
      * hold `BRIDGE_PERMISSION`. A receiver registered with
      * `registerReceiver(receiver, filter, "com.tiger.usbmanager.permission.BRIDGE", null)`
-     * would therefore refuse every broadcast we send — which is what happened.
+     * (or a provider with `android:permission="...BRIDGE"`) would therefore refuse
+     * every broadcast we send — which is what happened. The provider no longer
+     * declares a signature permission for this reason.
      *
-     * Since we don't use `permission` on the receiver side, we MUST include a
+     * Since we don't use `permission` on the receiver / provider side, we MUST include a
      * per-build shared secret. Any third-party app that wants to impersonate
      * the chooser must know this constant, which is only obtainable by
      * decompiling this specific APK build.

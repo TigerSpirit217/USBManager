@@ -147,9 +147,6 @@ internal object SystemServerHooks {
         listenerHolder: DelegatingListener,
     ) {
         val ctx = env.requireContext()
-        // Initialise file logger NOW so all subsequent [HOOK]/[WATCHER] lines
-        // are persisted (app-process LogCapture can't see system_server logs).
-        SystemServerLogger.init(ctx)
         env.info("[HOOK] onContextReady start; contentResolver ok=${ctx.contentResolver != null}")
         val hostClient = HostProviderClient(ctx)
         val policyEngine = UsbPolicyEngine(hostClient)
@@ -183,16 +180,6 @@ internal object SystemServerHooks {
                             val pkg = runCatching { maybeSysContext.packageName }.getOrDefault("<null>")
                             val ctxCls = maybeSysContext.javaClass.name
                             val appCls = app.javaClass.name
-
-                            // Always try init-ing SSLOG eagerly (before the package-name
-                            // check) so we generate ss_*.log even if the "android" match
-                            // fails on OEM images. The logger is robust to being called
-                            // from non-system contexts (falls back to a no-op).
-                            runCatching {
-                                SystemServerLogger.init(maybeSysContext)
-                            }.onFailure { t ->
-                                env.warn("[HOOK] SSLOG eager-init failed uid=$myUid pkg=$pkg", t)
-                            }
 
                             // If systemContext is already set → guaranteed duplicate.
                             if (env.systemContext != null) {
@@ -258,7 +245,7 @@ internal object SystemServerHooks {
                     replayed++
                     evt = pending.poll()
                 }
-                SystemServerLogger.log("I", "USBManager", "[HOOK] DelegatingListener wired delegate; replayed $replayed buffered events")
+                android.util.Log.i("USBManager", "[HOOK] DelegatingListener wired delegate; replayed $replayed buffered events")
             }
 
         override fun onUsbState(connected: Boolean) {
@@ -272,7 +259,7 @@ internal object SystemServerHooks {
             val n = pending.size
             // Log a line every so often to help diagnose "delegate never set" without spamming.
             if (n == 1 || n % 4 == 0) {
-                SystemServerLogger.log("I", "USBManager", "[HOOK] DelegatingListener delegate=null; buffering event connected=$connected pending=$n (onContextReady not called yet!)")
+                android.util.Log.i("USBManager", "[HOOK] DelegatingListener delegate=null; buffering event connected=$connected pending=$n (onContextReady not called yet!)")
             }
         }
     }

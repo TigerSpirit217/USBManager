@@ -1,6 +1,4 @@
-﻿package com.tiger.usbmanager.hook
-
-import com.tiger.usbmanager.policy.HostInfo
+package com.tiger.usbmanager.hook
 
 /**
  * Identifies the currently connected USB host by its ADB RSA public key.
@@ -47,18 +45,6 @@ internal object UsbHostIdentifier {
     fun defaultHostName(key: String?): String {
         if (key.isNullOrBlank()) return "Unknown PC"
         return "PC ${key.take(8)}"
-    }
-
-    /** Returns a [HostInfo] stub for an as-yet-unknown host. */
-    fun unknownHost(): HostInfo? {
-        val key = currentHostKey() ?: return null
-        return HostInfo(
-            name = defaultHostName(key),
-            hostKey = key,
-            usbMode = "mtp",
-            adb = true,
-            auto = false,
-        )
     }
 
     private const val ADB_KEYS_PATH = "/data/misc/adb/adb_keys"

@@ -4,16 +4,6 @@
 
     <uses-sdk tools:overrideLibrary="io.github.libxposed.service,io.github.libxposed.service.interfaces" />
 
-    <!--
-        Custom permission guarding bridge traffic between the module app UI and the
-        system_server hook receiver. Signature protection means only apps signed with
-        the same key as this module can send broadcasts protected by it.
-    -->
-    <permission
-        android:name="com.tiger.usbmanager.permission.BRIDGE"
-        android:protectionLevel="signature" />
-
-    <uses-permission android:name="com.tiger.usbmanager.permission.BRIDGE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
     <application
@@ -55,15 +45,18 @@
         <!--
             Single source of truth for the known-host database. system_server queries
             it via ContentResolver to resolve policy synchronously when USB connects.
-            Guarded by the signature BRIDGE permission so only this module (and the
-            system uid) can reach it.
+            It is declared `android:exported="true"` (no signature permission) because
+            system_server (uid 1000) is signed with the PLATFORM key and can NEVER hold
+            a signature-protected module permission; requiring one would make every
+            system_server call throw SecurityException. Cross-process trust is established
+            instead by the BRIDGE_TOKEN inside each call's extras, exactly like the
+            broadcast receiver path.
         -->
         <provider
             android:name=".bridge.HostProvider"
             android:authorities="com.tiger.usbmanager.hosts"
             android:exported="true"
-            android:grantUriPermissions="false"
-            android:permission="com.tiger.usbmanager.permission.BRIDGE" />
+            android:grantUriPermissions="false" />
 
     </application>
 

@@ -29,7 +29,6 @@ internal class UsbController(
 
     /** UsbManager function bitmask constants, resolved reflectively. */
     private val functionBits: Map<UsbMode, Long> by lazy { resolveFunctionBits() }
-    private val adbBit: Long? by lazy { resolveAdbBit() }
 
     fun bindUsbDeviceManager(instance: Any?) {
         if (instance != null) {
@@ -96,31 +95,39 @@ internal class UsbController(
         return false
     }
 
-    /** Toggles ADB at the framework + daemon level. */
+    /** Toggle ADB at the framework + daemon level.
+     *
+     *  The framework-wide [AdbService] path is preferred because it keeps the
+     *  ADB_ENABLED setting, the adbd daemon lifecycle AND the "USB debugging
+     *  connected" notification consistent. The previous direct `Settings.Global`
+     *  write + `ctl.adbd` bypass never engaged that notification lifecycle, which
+     *  left a stale / transient "USB 调试已连接" notice behind on unplug. */
     fun setAdbEnabled(enabled: Boolean): Boolean {
-        val ctx = env.systemContext
-        var ok = false
+        // 1) Framework-managed path: drives setting + adbd + notification together.
+        val frameworkOk = AdbServiceHook.trySetAdbEnabled(enabled)
 
-        // 1) Settings.Global.ADB_ENABLED — the canonical framework switch.
-        if (ctx != null) {
-            ok = runCatching {
-                Settings.Global.putInt(ctx.contentResolver, Settings.Global.ADB_ENABLED, if (enabled) 1 else 0)
-            }.onFailure { env.warn("setAdbEnabled: Settings.Global failed", it) }.isSuccess
-        }
-
-        // 2) Start/stop the adbd daemon so it actually goes down on unplug.
+        // 2) Always enforce the daemon state explicitly. "adbd must be DOWN after
+        //    unplug" is a hard requirement and must hold even on ROMs where the
+        //    AdbService reflection failed or is a no-op.
         val ctlOk = setSystemProperty(
             if (enabled) "ctl.start" else "ctl.stop",
             "adbd",
         )
-        if (!ctlOk) {
-            env.warn("setAdbEnabled: ctl.start/stop adbd failed (property write blocked?)")
+
+        // 3) Fall back to the raw setting only when the framework path couldn't set it.
+        val settingOk = if (frameworkOk) {
+            true
+        } else {
+            val ctx = env.systemContext
+            if (ctx != null) {
+                runCatching {
+                    Settings.Global.putInt(ctx.contentResolver, Settings.Global.ADB_ENABLED, if (enabled) 1 else 0)
+                }.isSuccess
+            } else false
         }
 
-        // 3) Reflectively poke AdbService if we captured one.
-        AdbServiceHook.setAdbEnabled(enabled)
-
-        return ok || ctlOk
+        env.info("setAdbEnabled($enabled): framework=$frameworkOk ctl=$ctlOk settingOk=$settingOk")
+        return frameworkOk || settingOk || ctlOk
     }
 
     // ---- Framework API attempts ----
@@ -267,25 +274,6 @@ internal class UsbController(
             }
         }
         return map
-    }
-
-    private fun resolveAdbBit(): Long? {
-        // NOTE: as of Android 14 the adb function bit may simply not exist on
-        // UsbManager anymore (it was moved under the AdbService umbrella).
-        // Returning null is perfectly valid — we just don't OR any adb bit
-        // into the gadget function mask.
-        val cls = env.classLoader.findClassOrNull("android.hardware.usb.UsbManager") ?: return null
-        val bit = cls.staticLongFieldOrNull("FUNCTION_ADB")
-        env.info("Resolved UsbManager.FUNCTION_ADB = $bit")
-        return bit
-    }
-
-    @Suppress("unused")
-    private fun buildConfigString(mode: UsbMode, adb: Boolean): String {
-        // Legacy property-style string. Kept only for reference; the actual
-        // function-switching code never includes ",adb" anymore (see KDoc on
-        // setUsbFunctions).
-        return if (adb) "${mode.wireValue},adb" else mode.wireValue
     }
 
     // ---- SystemProperties helper ----

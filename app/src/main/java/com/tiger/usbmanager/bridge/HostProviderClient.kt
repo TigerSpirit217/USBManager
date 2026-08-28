@@ -3,8 +3,8 @@ package com.tiger.usbmanager.bridge
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
-import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.tiger.usbmanager.ModuleConstants
 import com.tiger.usbmanager.policy.HostInfo
 import com.tiger.usbmanager.policy.UsbMode
 
@@ -30,7 +30,15 @@ class HostProviderClient(context: Context) {
 
     private val appContext = context.applicationContext
     private val resolver = appContext.contentResolver
-    private val gson = Gson()
+    private val gson = UsbBridgeContract.GSON
+
+    /**
+     * Returns the given extras (or a new Bundle) stamped with the shared
+     * BRIDGE_TOKEN so the export provider can authorise mutating calls.
+     */
+    private fun tokenFor(existing: Bundle?): Bundle = (existing ?: Bundle()).apply {
+        putString(UsbBridgeContract.KEY_BRIDGE_TOKEN, ModuleConstants.BRIDGE_TOKEN)
+    }
 
     // ---- Host lookup with SP fallback ----
 
@@ -90,7 +98,12 @@ class HostProviderClient(context: Context) {
         if (hostKey.isBlank()) return false
         var ok = false
         runCatching {
-            val res = resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_DELETE_HOST, hostKey, null)
+            val res = resolver.call(
+                UsbBridgeContract.HOST_URI,
+                UsbBridgeContract.METHOD_DELETE_HOST,
+                hostKey,
+                tokenFor(null),
+            )
             if (res?.getBoolean(UsbBridgeContract.KEY_RESULT, false) == true) ok = true
         }.onFailure { Log.e(TAG, "[CLIENT] deleteHost provider call failed", it) }
         val localRemoved = fallbackRemove(hostKey)
@@ -100,9 +113,9 @@ class HostProviderClient(context: Context) {
 
     /** Persists (insert or update) the given host. */
     fun save(host: HostInfo): Boolean {
-        val extras = Bundle().apply {
+        val extras = tokenFor(Bundle().apply {
             putString(UsbBridgeContract.KEY_HOST_JSON, gson.toJson(host))
-        }
+        })
         Log.i(TAG, "[CLIENT] save host: name=${host.name} auto=${host.auto} mode=${host.mode} adb=${host.adb}")
         val result = runCatching {
             resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_SAVE_HOST, null, extras)
@@ -162,17 +175,11 @@ class HostProviderClient(context: Context) {
         hostKey.take(32) + "_" + (hostKey.hashCode().toLong() and 0xffffffffL)
 
     private fun fallbackParseHost(json: String): HostInfo? {
-        // Json format written by SystemServerReceiver.saveHostFallback:
-        //   {"n":"name","k":"key","m":"mode","a":adbBool,"au":autoBool}
-        // Map to HostInfo fields.
+        // The fallback store uses the same HostInfo JSON format as the
+        // authoritative provider, so serialization/deserialization stays in sync.
         return runCatching {
-            val o = gson.fromJson(json, java.util.LinkedHashMap::class.java)
-            val name = o["n"] as? String ?: ""
-            val k = o["k"] as? String ?: return@runCatching null
-            val m = o["m"] as? String ?: UsbMode.CHARGING.wireValue
-            val a = o["a"] as? Boolean ?: false
-            val au = o["au"] as? Boolean ?: false
-            HostInfo(name = name, hostKey = k, usbMode = m, adb = a, auto = au)
+            val host = gson.fromJson(json, HostInfo::class.java)
+            host.takeIf { it.hostKey.isNotBlank() }
         }.getOrNull()
     }
 
@@ -199,7 +206,12 @@ class HostProviderClient(context: Context) {
         runCatching {
             val prefs = fallbackSp()
             val key = fallbackKeyFor(host.hostKey)
-            val json = """{"n":${jsonS(host.name)},"k":${jsonS(host.hostKey)},"m":${jsonS(host.usbMode)},"a":${host.adb},"au":${host.auto}}}"""
+            val json = try {
+                gson.toJson(host)
+            } catch (t: Throwable) {
+                Log.e(TAG, "[CLIENT] fallbackUpsert serialize FAILED", t)
+                return@runCatching
+            }
             prefs.edit().putString(key, json).apply()
         }
     }
@@ -213,22 +225,6 @@ class HostProviderClient(context: Context) {
             prefs.edit().remove(key).apply()
             true
         }.getOrDefault(false)
-    }
-
-    private fun jsonS(s: String): String {
-        val out = StringBuilder(s.length + 2)
-        out.append('"')
-        for (ch in s) {
-            when (ch) {
-                '"', '\\' -> out.append('\\').append(ch)
-                '\n' -> out.append("\\n")
-                '\r' -> out.append("\\r")
-                '\t' -> out.append("\\t")
-                else -> if (ch.code < 0x20) out.append(String.format("\\u%04x", ch.code)) else out.append(ch)
-            }
-        }
-        out.append('"')
-        return out.toString()
     }
 
     /** Defaults for unknown hosts: (mode, adb). */
@@ -269,7 +265,7 @@ class HostProviderClient(context: Context) {
      */
     fun putPendingApply(payload: PendingApplyPayload): Boolean {
         val json = runCatching { gson.toJson(payload) }.getOrDefault(null) ?: return false
-        val extras = Bundle().apply { putString(UsbBridgeContract.KEY_PENDING_JSON, json) }
+        val extras = tokenFor(Bundle().apply { putString(UsbBridgeContract.KEY_PENDING_JSON, json) })
         val result = runCatching {
             resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_PUT_PENDING_APPLY, null, extras)
         }.onFailure { Log.e(TAG, "[CLIENT] putPendingApply FAILED", it) }.getOrNull()
@@ -284,7 +280,7 @@ class HostProviderClient(context: Context) {
      */
     fun getAndClearPendingApply(): PendingApplyPayload? {
         val result = runCatching {
-            resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY, null, null)
+            resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY, null, tokenFor(null))
         }.onFailure { Log.e(TAG, "[CLIENT] getAndClearPendingApply FAILED", it) }.getOrNull()
         val json = result?.getString(UsbBridgeContract.KEY_RESULT) ?: return null
         val payload = runCatching { gson.fromJson(json, PendingApplyPayload::class.java) }

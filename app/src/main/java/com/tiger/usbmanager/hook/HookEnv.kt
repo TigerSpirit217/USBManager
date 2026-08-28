@@ -18,21 +18,12 @@ internal class HookEnv(
     @Volatile var systemContext: Context? = null
 
     fun log(level: Int, msg: String, t: Throwable? = null) {
-        // 1) Route through XposedModule.log → logcat (visible via adb logcat).
+        // Route through XposedModule.log → logcat (visible via adb logcat and the
+        // LSPosed in-app log viewer). This is the single, canonical log sink; the
+        // file-persistence layer was removed because system_server (uid 1000)
+        // cannot write into another app's private storage on modern Android.
         if (t == null) module.log(level, TAG, msg)
         else module.log(level, TAG, msg, t)
-
-        // 2) Also write to the log file via SystemServerLogger (survives USB
-        //    disconnect; app-process LogCapture can't see system_server logs).
-        val levelStr = when (level) {
-            Log.VERBOSE -> "V"
-            Log.DEBUG -> "D"
-            Log.INFO -> "I"
-            Log.WARN -> "W"
-            Log.ERROR -> "E"
-            else -> "I"
-        }
-        SystemServerLogger.log(levelStr, TAG, msg, t)
     }
 
     fun info(msg: String) = log(Log.INFO, msg)

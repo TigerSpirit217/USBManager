@@ -1,4 +1,4 @@
-﻿package com.tiger.usbmanager.hook
+package com.tiger.usbmanager.hook
 
 import io.github.libxposed.api.XposedInterface
 
@@ -84,25 +84,36 @@ internal object AdbServiceHook {
         }
     }
 
-    /** Best-effort: toggle ADB via the captured AdbService instance. */
-    fun setAdbEnabled(enabled: Boolean) {
-        val service = adbService ?: return
-        runCatching {
+    /** Toggle ADB through the framework-wide [AdbService]. Returns true iff a
+     *  matching `setAdbEnabled` method was found and invoked without throwing
+     *  (the exact signature/ROM variant does not matter — success means the
+     *  framework took over).
+     *
+     *  This is the *authoritative* driver: it keeps `Settings.Global.ADB_ENABLED`,
+     *  the adbd daemon lifecycle AND the "USB debugging connected" notification all
+     *  in sync the way the framework expects. Bypassing it (as the old direct
+     *  `Settings.Global` + `ctl.adbd` path did) left the notification in a stale
+     *  state, which is why a transient / leftover "USB 调试已连接" notice surfaced
+     *  on unplug. */
+    fun trySetAdbEnabled(enabled: Boolean): Boolean {
+        val service = adbService ?: return false
+        return runCatching {
             // setAdbEnabled(boolean enable, String packageName) on modern AOSP.
-            val m = service.javaClass.methodsNamed("setAdbEnabled").firstOrNull {
+            val m2 = service.javaClass.methodsNamed("setAdbEnabled").firstOrNull {
                 it.parameterCount == 2 &&
                     it.parameterTypes[0] == Boolean::class.javaPrimitiveType &&
                     it.parameterTypes[1] == String::class.java
             }
-            if (m != null) {
-                m.invoke(service, enabled, MODULE_PACKAGE)
+            if (m2 != null) {
+                m2.invoke(service, enabled, MODULE_PACKAGE)
             } else {
                 val m1 = service.javaClass.methodsNamed("setAdbEnabled").firstOrNull {
                     it.parameterCount == 1 && it.parameterTypes[0] == Boolean::class.javaPrimitiveType
                 }
-                m1?.invoke(service, enabled)
+                if (m1 != null) m1.invoke(service, enabled) else return@runCatching false
             }
-        }.onFailure { /* swallow; UsbController has its own paths */ }
+            true
+        }.onFailure { /* swallow; UsbController owns its own fallback paths */ }.getOrDefault(false)
     }
 
     private const val MODULE_PACKAGE = "com.tiger.usbmanager"

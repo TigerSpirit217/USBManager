@@ -24,8 +24,8 @@ import com.tiger.usbmanager.policy.UsbMode
  * Android would NEVER grant a custom `signature-level` permission to uid 1000; the
  * receiver silently rejected every broadcast. Instead we include a compile-time
  * shared token ([ModuleConstants.BRIDGE_TOKEN]) in each broadcast extra and drop
- * anything that doesn't match. This is equivalent against non-decompiling attackers
- * and actually works across the uid boundary.
+ * anything that doesn't match. The same token now gates mutating [HostProvider]
+ * calls for the same reason.
  */
 internal class SystemServerReceiver(
     private val env: HookEnv,
@@ -207,29 +207,21 @@ internal class SystemServerReceiver(
      */
     private fun saveHostFallback(ctx: Context, host: HostInfo): Boolean {
         val prefs = ctx.getSharedPreferences("usbmanager_hosts_fallback", Context.MODE_PRIVATE)
-        val json = """{"n":${jsonS(host.name)},"k":${jsonS(host.hostKey)},"m":${jsonS(host.usbMode)},"a":${host.adb},"au":${host.auto}}"""
-        prefs.edit().putString(host.hostKey.take(32) + "_" + (host.hostKey.hashCode().toLong() and 0xffffffffL), json).apply()
+        val json = usbBridgeGson.toJson(host)
+        prefs.edit()
+            .putString(fallbackKeyFor(host.hostKey), json)
+            .apply()
         env.info("[RX] SharedPreferences fallback: wrote host name=${host.name}")
         return true
     }
 
-    private fun jsonS(s: String): String {
-        val out = StringBuilder(s.length + 2)
-        out.append('"')
-        for (ch in s) {
-            when (ch) {
-                '"', '\\' -> out.append('\\').append(ch)
-                '\n' -> out.append("\\n")
-                '\r' -> out.append("\\r")
-                '\t' -> out.append("\\t")
-                else -> if (ch.code < 0x20) out.append(String.format("\\u%04x", ch.code)) else out.append(ch)
-            }
-        }
-        out.append('"')
-        return out.toString()
-    }
+    /** Matches HostProviderClient.fallbackKeyFor so both copies use the same key. */
+    private fun fallbackKeyFor(hostKey: String): String =
+        hostKey.take(32) + "_" + (hostKey.hashCode().toLong() and 0xffffffffL)
 
     private companion object {
+        /** Shared Gson (single instance) for the fallback host serialization. */
+        val usbBridgeGson: com.google.gson.Gson by lazy { com.tiger.usbmanager.bridge.UsbBridgeContract.GSON }
 
         // ---- Android public USB broadcast (sticky) ----
         /** @see android.hardware.usb.UsbManager.ACTION_USB_STATE */

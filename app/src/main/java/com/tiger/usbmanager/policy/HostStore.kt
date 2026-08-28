@@ -1,10 +1,10 @@
-﻿package com.tiger.usbmanager.policy
+package com.tiger.usbmanager.policy
 
 import android.content.Context
-import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import com.tiger.usbmanager.ModuleConstants
+import com.tiger.usbmanager.bridge.UsbBridgeContract
 
 /**
  * Local (module-app side) JSON-backed database of known USB hosts. Persists the
@@ -21,7 +21,7 @@ class HostStore private constructor(private val context: Context) {
         Context.MODE_PRIVATE,
     )
 
-    private val gson = Gson()
+    private val gson = UsbBridgeContract.GSON
     private val type = object : TypeToken<MutableList<HostInfo>>() {}.type
 
     fun list(): List<HostInfo> {

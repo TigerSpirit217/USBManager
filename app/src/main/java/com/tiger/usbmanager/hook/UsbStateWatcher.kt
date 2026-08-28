@@ -65,6 +65,13 @@ internal class UsbStateWatcher(
      *  shows the chooser": OEMs frequently emit a transient CONNECTED=true
      *  right before DISCONNECTED during USB teardown. */
     @Volatile private var pendingConnectRunnable: Runnable? = null
+    /** Token of the currently-pending debounced handleDisconnect runnable. Used to
+     *  cancel the DISCONNECT action when a CONNECTED rising edge arrives right after
+     *  (USB re-enumeration from a mode / ADB change). Without this, the transient
+     *  DISCONNECTED fired during re-enumeration runs handleDisconnect → turns ADB
+     *  OFF, then the subsequent CONNECTED turns it back ON — the "ADB flickers ~3x
+     *  before settling" bug. */
+    @Volatile private var pendingDisconnectRunnable: Runnable? = null
 
     // ---- Pending-apply polling state ----
     // Id of the poll loop runnable so we can cancel it when USB disconnects or
@@ -106,8 +113,15 @@ internal class UsbStateWatcher(
     private val recentUserChoices = mutableMapOf<String, ReplayChoice>()
 
     private companion object {
-        /** See CONFIRMATION_GRACE_MS header. */
-        private const val CONFIRMATION_GRACE_MS = 8_000L
+        /**
+         * Window (ms) during which a freshly-confirmed "ADB ON" choice is protected
+         * from the disconnect auto-off rule. Kept equal to the chooser's usable window
+         * (~30 s = POLL_MAX_ATTEMPTS * POLL_INTERVAL_MS) so that however long the user
+         * has to confirm the dialog, the same window applies before unplugging turns ADB
+         * back off. Previously this was 8 s, which was shorter than the poll window and
+         * could wipe out an ADB-ON confirmation made more than 8 s after connecting.
+         */
+        private const val CONFIRMATION_GRACE_MS = 30_000L
 
         /** Debounce window (ms) for handleConnect. An onUsbState(true) has to
          *  "survive" this long before we actually resolve policy. If a
@@ -115,6 +129,17 @@ internal class UsbStateWatcher(
          *  torn down and nothing fires. 300 ms is well below user-perceptible
          *  latency but long enough to absorb the USB teardown fake-positive. */
         private const val CONNECT_DEBOUNCE_MS = 300L
+
+        /** Debounce window (ms) for handleDisconnect. A DISCONNECTED edge must
+         *  "survive" this long before we turn ADB off. This is the symmetric
+         *  guard to [CONNECT_DEBOUNCE_MS]: applying a saved host's mode/ADB
+         *  re-enumerates the USB gadget, which the kernel reports as a brief
+         *  DISCONNECTED → CONNECTED pair. Without the debounce, the transient
+         *  DISCONNECTED runs handleDisconnect and kills ADB, then CONNECTED
+         *  re-enables it — the reported "ADB blinks ~3x before staying on".
+         *  A genuine unplug never re-connects, so it still turns ADB off (just
+         *  imperceptibly later). */
+        private const val DISCONNECT_DEBOUNCE_MS = 800L
 
         /** Lifetime of one non-remembered choice in the replay cache. */
         private const val REPLAY_WINDOW_MS = 15_000L
@@ -191,6 +216,15 @@ internal class UsbStateWatcher(
             // CONNECTED rising edge — debounce before running policy. This
             // absorbs the well-known OEM fake-positive where CONNECTED=true
             // fires 10 ms before DISCONNECTED during cable-unplug teardown.
+            // A rising edge ALSO cancels any pending disconnect debounce: it
+            // proves the preceding DISCONNECTED was just re-enumeration, so we
+            // must NOT have turned ADB off (that was the flicker root cause).
+            val pendingDisc = pendingDisconnectRunnable
+            if (pendingDisc != null) {
+                handler.removeCallbacks(pendingDisc)
+                pendingDisconnectRunnable = null
+                env.info("[WATCHER] rising edge cancelled pending disconnect debounce (re-enumeration; ADB left alone)")
+            }
             val token = Runnable {
                 pendingConnectRunnable = null
                 runCatching {
@@ -203,17 +237,22 @@ internal class UsbStateWatcher(
             env.info("[WATCHER] USB rising edge scheduled handleConnect after ${CONNECT_DEBOUNCE_MS}ms debounce")
         } else {
             // FALLING edge: cancel any pending CONNECT runnable first (it was
-            // a false positive), then actually run handleDisconnect.
+            // a false positive), then debounce handleDisconnect so a re-enumerating
+            // DISCONNECT (immediately followed by CONNECT) doesn't turn ADB off.
             val pending = pendingConnectRunnable
             if (pending != null) {
                 handler.removeCallbacks(pending)
                 pendingConnectRunnable = null
                 env.info("[WATCHER] USB falling edge cancelled pending handleConnect debounce (ghost connect suppressed)")
             }
-            handler.post {
+            val token = Runnable {
+                pendingDisconnectRunnable = null
                 runCatching { handleDisconnect() }
                     .onFailure { env.error("[WATCHER] handleDisconnect FAILED", it) }
             }
+            pendingDisconnectRunnable = token
+            handler.postDelayed(token, DISCONNECT_DEBOUNCE_MS)
+            env.info("[WATCHER] USB falling edge scheduled handleDisconnect after ${DISCONNECT_DEBOUNCE_MS}ms debounce")
         }
     }
 

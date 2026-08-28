@@ -14,6 +14,11 @@ object UsbBridgeContract {
 
     val HOST_URI: Uri = Uri.parse("content://${ModuleConstants.HOST_AUTHORITY}")
 
+    /** Shared Gson used across process boundaries (bridge + provider + fallback).
+     *  A single instance avoids the small per-use allocation of constructing Gson
+     *  repeatedly in HotPaths like USB-connect handling. */
+    val GSON: com.google.gson.Gson = com.google.gson.Gson()
+
     // ---- ContentProvider.call() methods ----
 
     /** arg = hostKey; returns HostInfo JSON or null. */
@@ -53,4 +58,7 @@ object UsbBridgeContract {
     const val KEY_DISCONNECT_AUTO_OFF = "disconnect_auto_off"
     /** Full JSON of PendingApply payload, used by put/get methods above. */
     const val KEY_PENDING_JSON = "pending_json"
+
+    /** Bundle key carrying the shared BRIDGE_TOKEN on mutating provider calls. */
+    const val KEY_BRIDGE_TOKEN = "bridge_token"
 }
