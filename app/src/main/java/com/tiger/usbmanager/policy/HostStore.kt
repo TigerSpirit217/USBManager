@@ -26,21 +26,35 @@ class HostStore private constructor(private val context: Context) {
 
     fun list(): List<HostInfo> {
         val raw = prefs.getString(KEY_HOSTS_JSON, null) ?: return emptyList()
-        return runCatching {
+        val parsed = runCatching {
             gson.fromJson<MutableList<HostInfo>>(raw, type) ?: emptyList()
         }.onFailure {
             // Corrupt JSON — reset rather than crash.
             prefs.edit().remove(KEY_HOSTS_JSON).apply()
         }.getOrDefault(emptyList())
+
+        // v2 and earlier stored the complete adb_keys line. Migrate it lazily to
+        // the stable SHA-256 key-material fingerprint used by current sessions.
+        val migrated = parsed.map { host ->
+            val normalized = HostKeyFingerprint.normalize(host.hostKey)
+            if (normalized != null && normalized != host.hostKey) {
+                host.copy(hostKey = normalized)
+            } else host
+        }.distinctBy { it.hostKey }
+        if (migrated != parsed) persist(migrated)
+        return migrated
     }
 
     fun getByKey(hostKey: String): HostInfo? =
         list().firstOrNull { it.hostKey == hostKey }
 
     fun upsert(host: HostInfo) {
+        val canonicalHost = HostKeyFingerprint.normalize(host.hostKey)
+            ?.let { host.copy(hostKey = it) }
+            ?: host
         val current = list().toMutableList()
-        val idx = current.indexOfFirst { it.hostKey == host.hostKey }
-        if (idx >= 0) current[idx] = host else current.add(host)
+        val idx = current.indexOfFirst { it.hostKey == canonicalHost.hostKey }
+        if (idx >= 0) current[idx] = canonicalHost else current.add(canonicalHost)
         persist(current)
     }
 

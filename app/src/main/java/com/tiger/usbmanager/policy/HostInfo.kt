@@ -10,7 +10,7 @@ data class HostInfo(
     @SerializedName("name")
     val name: String,
 
-    /** ADB RSA public key fingerprint (the line stored in /data/misc/adb/adb_keys). */
+    /** Lowercase SHA-256 fingerprint of the ADB RSA public-key material. */
     @SerializedName("hostKey")
     val hostKey: String,
 

@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import com.google.gson.reflect.TypeToken
 import com.tiger.usbmanager.ModuleConstants
+import com.tiger.usbmanager.policy.HostKeyFingerprint
 import com.tiger.usbmanager.policy.HostInfo
 import com.tiger.usbmanager.policy.UsbMode
 
@@ -186,8 +187,23 @@ class HostProviderClient(context: Context) {
     private fun fallbackFindByKey(hostKey: String): HostInfo? {
         val prefs = runCatching { fallbackSp() }.getOrNull() ?: return null
         val key = fallbackKeyFor(hostKey)
-        val json = prefs.getString(key, null) ?: return null
-        return fallbackParseHost(json)
+        val direct = prefs.getString(key, null)?.let(::fallbackParseHost)
+        if (direct != null) return direct
+
+        // Compatibility with fallback entries written before host keys became
+        // SHA-256 fingerprints. Scan once, then rewrite a matching legacy entry.
+        for ((legacyStorageKey, value) in prefs.all) {
+            if (value !is String) continue
+            val legacyHost = fallbackParseHost(value) ?: continue
+            val normalized = HostKeyFingerprint.normalize(legacyHost.hostKey) ?: continue
+            if (normalized != hostKey) continue
+            val migrated = legacyHost.copy(hostKey = normalized)
+            prefs.edit().remove(legacyStorageKey).apply()
+            fallbackUpsert(migrated)
+            Log.i(TAG, "[CLIENT] migrated legacy fallback key for host=${migrated.name}")
+            return migrated
+        }
+        return null
     }
 
     private fun fallbackListAll(): List<HostInfo> {
@@ -204,10 +220,13 @@ class HostProviderClient(context: Context) {
 
     private fun fallbackUpsert(host: HostInfo) {
         runCatching {
+            val canonicalHost = HostKeyFingerprint.normalize(host.hostKey)
+                ?.let { host.copy(hostKey = it) }
+                ?: host
             val prefs = fallbackSp()
-            val key = fallbackKeyFor(host.hostKey)
+            val key = fallbackKeyFor(canonicalHost.hostKey)
             val json = try {
-                gson.toJson(host)
+                gson.toJson(canonicalHost)
             } catch (t: Throwable) {
                 Log.e(TAG, "[CLIENT] fallbackUpsert serialize FAILED", t)
                 return@runCatching

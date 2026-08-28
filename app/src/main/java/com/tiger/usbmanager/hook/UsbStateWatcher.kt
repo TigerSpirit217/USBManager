@@ -72,6 +72,8 @@ internal class UsbStateWatcher(
      *  OFF, then the subsequent CONNECTED turns it back ON — the "ADB flickers ~3x
      *  before settling" bug. */
     @Volatile private var pendingDisconnectRunnable: Runnable? = null
+    /** Waiting window for adbd to report a key belonging to this USB session. */
+    @Volatile private var pendingIdentityRunnable: Runnable? = null
 
     // ---- Pending-apply polling state ----
     // Id of the poll loop runnable so we can cancel it when USB disconnects or
@@ -144,6 +146,9 @@ internal class UsbStateWatcher(
         /** Lifetime of one non-remembered choice in the replay cache. */
         private const val REPLAY_WINDOW_MS = 15_000L
 
+        /** Maximum time after the USB debounce to wait for adbd's connected-key event. */
+        private const val HOST_IDENTITY_WAIT_MS = 2_000L
+
         private const val CHANNEL_ID = "usb_chooser"
         private const val CHANNEL_NAME = "USB 选择器"
         private const val NOTIF_TAG = "com.tiger.usbmanager.chooser"
@@ -154,6 +159,12 @@ internal class UsbStateWatcher(
         private const val POLL_MAX_ATTEMPTS = 30
         /** Dedup window for applying the same pending payload (ms). */
         private const val APPLY_DEDUP_WINDOW_MS = 5_000L
+    }
+
+    init {
+        UsbHostIdentifier.setKeyListener { generation, hostKey ->
+            handler.post { onCurrentSessionKeyAvailable(generation, hostKey) }
+        }
     }
 
     /**
@@ -213,6 +224,8 @@ internal class UsbStateWatcher(
         }
         lastConnected = connected
         if (connected) {
+            val session = UsbHostIdentifier.onUsbConnected()
+            env.info("[WATCHER] USB session active generation=$session")
             // CONNECTED rising edge — debounce before running policy. This
             // absorbs the well-known OEM fake-positive where CONNECTED=true
             // fires 10 ms before DISCONNECTED during cable-unplug teardown.
@@ -262,10 +275,53 @@ internal class UsbStateWatcher(
             env.warn("[WATCHER] systemContext not ready; skipping connect handling")
             return
         }
-        val now = System.currentTimeMillis()
         env.info("[WATCHER] systemContext available: uid=${android.os.Process.myUid()}")
 
         val hostKey = UsbHostIdentifier.currentHostKey().orEmpty()
+        if (hostKey.isBlank()) {
+            val generation = UsbHostIdentifier.currentSessionGeneration()
+            pendingIdentityRunnable?.let(handler::removeCallbacks)
+            val timeout = Runnable {
+                pendingIdentityRunnable = null
+                if (!lastConnected || generation != UsbHostIdentifier.currentSessionGeneration()) {
+                    env.info("[WATCHER] host identity wait stale generation=$generation; ignoring")
+                    return@Runnable
+                }
+                env.info(
+                    "[WATCHER] no current-session ADB key after ${HOST_IDENTITY_WAIT_MS}ms; " +
+                        "treating host as unknown",
+                )
+                resolveConnectedHost(ctx, "")
+            }
+            pendingIdentityRunnable = timeout
+            handler.postDelayed(timeout, HOST_IDENTITY_WAIT_MS)
+            env.info(
+                "[WATCHER] current-session host key not ready; waiting ${HOST_IDENTITY_WAIT_MS}ms " +
+                    "generation=$generation",
+            )
+            return
+        }
+
+        resolveConnectedHost(ctx, hostKey)
+    }
+
+    private fun onCurrentSessionKeyAvailable(generation: Long, hostKey: String) {
+        if (!lastConnected || generation != UsbHostIdentifier.currentSessionGeneration()) {
+            env.info("[WATCHER] ignoring stale ADB key event generation=$generation")
+            return
+        }
+        // Before the 300 ms physical-connect debounce expires, handleConnect will
+        // pick the key up naturally. Only accelerate an active identity wait.
+        val pending = pendingIdentityRunnable ?: return
+        handler.removeCallbacks(pending)
+        pendingIdentityRunnable = null
+        val ctx = env.systemContext ?: return
+        env.info("[WATCHER] current-session ADB key arrived; resolving host immediately")
+        resolveConnectedHost(ctx, hostKey)
+    }
+
+    private fun resolveConnectedHost(ctx: Context, hostKey: String) {
+        val now = System.currentTimeMillis()
         val hostName = UsbHostIdentifier.defaultHostName(hostKey.takeIf { it.isNotBlank() })
         env.info("[WATCHER] USB CONNECT hostKey=${hostKey.take(16)}…(len=${hostKey.length}) name=$hostName")
 
@@ -306,6 +362,9 @@ internal class UsbStateWatcher(
     }
 
     private fun handleDisconnect() {
+        pendingIdentityRunnable?.let(handler::removeCallbacks)
+        pendingIdentityRunnable = null
+        UsbHostIdentifier.onUsbDisconnected()
         // USB cable unplugged — stop any in-flight pending-apply poll loop
         // (the chooser UI can't resolve anything useful for a cable that isn't
         // connected anymore, and we'd otherwise keep polling for 30 s).
