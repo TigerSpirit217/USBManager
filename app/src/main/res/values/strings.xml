@@ -17,6 +17,7 @@
     <string name="settings_default_mode">未知电脑默认模式</string>
     <string name="settings_default_adb">未知电脑默认开启 ADB</string>
     <string name="settings_disconnect_auto_off">拔线自动关闭 ADB</string>
+    <string name="settings_chooser_while_locked">锁屏时也弹出选择窗口</string>
     <string name="settings_edit">编辑</string>
     <string name="settings_delete">删除</string>
     <string name="settings_deleted">已删除</string>

@@ -71,6 +71,8 @@ object UsbBridgeContract {
     const val KEY_MODE = "mode"
     const val KEY_ADB = "adb"
     const val KEY_DISCONNECT_AUTO_OFF = "disconnect_auto_off"
+    /** Whether the chooser may show while the device is locked. */
+    const val KEY_CHOOSER_WHILE_LOCKED = "chooser_while_locked"
     /** Full JSON of PendingApply payload, used by put/get methods above. */
     const val KEY_PENDING_JSON = "pending_json"
 

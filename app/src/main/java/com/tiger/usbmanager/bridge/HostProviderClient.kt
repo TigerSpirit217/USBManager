@@ -279,6 +279,7 @@ class HostProviderClient(context: Context) {
             defaultMode = UsbMode.fromWire(result?.getString(UsbBridgeContract.KEY_MODE)),
             defaultAdb = result?.getBoolean(UsbBridgeContract.KEY_ADB, false) ?: false,
             disconnectAutoOffAdb = result?.getBoolean(UsbBridgeContract.KEY_DISCONNECT_AUTO_OFF, true) ?: true,
+            chooserWhileLocked = result?.getBoolean(UsbBridgeContract.KEY_CHOOSER_WHILE_LOCKED, false) ?: false,
         )
         Log.i(TAG, "[CLIENT] settings → $snap")
         return snap
@@ -347,4 +348,6 @@ data class ModuleSettingsSnapshot(
     val defaultMode: UsbMode,
     val defaultAdb: Boolean,
     val disconnectAutoOffAdb: Boolean,
+    /** Whether the USB mode chooser may show while the device is locked. */
+    val chooserWhileLocked: Boolean = false,
 )

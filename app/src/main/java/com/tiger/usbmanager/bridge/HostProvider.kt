@@ -185,6 +185,10 @@ class HostProvider : ContentProvider() {
                 UsbBridgeContract.KEY_DISCONNECT_AUTO_OFF,
                 ModuleSettings.disconnectAutoOffAdb(),
             )
+            putBoolean(
+                UsbBridgeContract.KEY_CHOOSER_WHILE_LOCKED,
+                ModuleSettings.chooserWhileLocked(),
+            )
         }
     }
 

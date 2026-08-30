@@ -494,6 +494,9 @@ class MainActivity : Activity() {
         addView(toggleRow(getString(R.string.settings_disconnect_auto_off), ModuleSettings.disconnectAutoOffAdb()) { checked ->
             ModuleSettings.prefs().edit().putBoolean(ModuleSettings.KEY_DISCONNECT_AUTO_OFF_ADB, checked).apply()
         })
+        addView(toggleRow(getString(R.string.settings_chooser_while_locked), ModuleSettings.chooserWhileLocked()) { checked ->
+            ModuleSettings.prefs().edit().putBoolean(ModuleSettings.KEY_CHOOSER_WHILE_LOCKED, checked).apply()
+        })
         addView(Button(this@MainActivity).apply {
             text = getString(R.string.settings_clear_all)
             setOnClickListener {

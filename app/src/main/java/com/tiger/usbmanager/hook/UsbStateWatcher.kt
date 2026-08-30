@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.KeyguardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -90,6 +91,20 @@ internal class UsbStateWatcher(
     // APPLY_USB_CONFIG broadcast was processed). Feeds non-remembered replay entries.
     @Volatile private var lastConfirmedAtMs: Long = 0L
 
+    // ---- Lock-deferral of the chooser (setting chooserWhileLocked=false) ----
+    // When the USB mode chooser can't be shown while locked, we remember the pending
+    // decision and re-launch it once the user unlocks. A single pending slot is enough:
+    // at most one host can be dialgged at a time, and it's cleared on disconnect / cancel
+    // / new connect.
+    //
+    // We deliberately DO NOT hook ACTION_USER_PRESENT: on modern Android that protected
+    // broadcast is frequently not delivered to dynamically-registered system_server
+    // receivers (observed on NothingOS / Android 16), so unlock would never fire. Instead
+    // we poll the keyguard state on the main handler (~500 ms) until unlocked, then launch.
+    @Volatile private var deferredAsk: UsbPolicyEngine.Decision.Ask? = null
+    @Volatile private var deferredPollGeneration: Int = 0
+    private var deferredPollRunnable: Runnable? = null
+
     // ---- Short-lived user choice replay cache ----
     // When the user taps "confirm" in the chooser but does NOT tick "remember
     // this computer", applying the configuration often causes the USB gadget
@@ -148,6 +163,12 @@ internal class UsbStateWatcher(
         private const val POLL_MAX_ATTEMPTS = 30
         /** Dedup window for applying the same pending payload (ms). */
         private const val APPLY_DEDUP_WINDOW_MS = 5_000L
+
+        /** Interval (ms) at which we re-check whether the keyguard is unlocked while a
+         *  chooser is deferred. Must be short enough to feel instant after unlocking. */
+        private const val LOCK_UNLOCK_POLL_MS = 500L
+        /** Guard so the poll never runs forever if the user never unlocks (~60 s). */
+        private const val LOCK_UNLOCK_MAX_ATTEMPTS = 120
     }
 
     /**
@@ -297,6 +318,9 @@ internal class UsbStateWatcher(
             .onFailure { env.error("[WATCHER] policyEngine.resolve FAILED", it) }
             .getOrElse { UsbPolicyEngine.Decision.Ask(hostKey, hostName, UsbMode.CHARGING, false) }
         env.info("[WATCHER] policy decision = $decision")
+        val settings: ModuleSettingsSnapshot = runCatching { hostClient.settings() }
+            .onFailure { env.warn("[WATCHER] settings lookup failed; using defaults", it) }
+            .getOrDefault(ModuleSettingsSnapshot(UsbMode.CHARGING, false, true))
         when (decision) {
             is UsbPolicyEngine.Decision.Apply -> {
                 env.info("[WATCHER] → AUTO-APPLY mode=${decision.mode} adb=${decision.adb}")
@@ -307,9 +331,81 @@ internal class UsbStateWatcher(
             }
             is UsbPolicyEngine.Decision.Ask -> {
                 env.info("[WATCHER] → ASK user preselect=${decision.preselectMode} adb=${decision.preselectAdb} host=$hostName")
-                launchChooser(ctx, decision)
+                if (shouldDeferChooserForLock(ctx, settings)) {
+                    env.info("[WATCHER] device locked & chooserWhileLocked=false → defer chooser until unlock")
+                    deferChooserUntilUnlock(ctx, decision)
+                } else {
+                    launchChooser(ctx, decision)
+                }
             }
         }
+    }
+
+    /**
+     * True when the chooser must be deferred because the device is locked and the
+     * user asked NOT to show the chooser while locked (chooserWhileLocked=false).
+     */
+    private fun shouldDeferChooserForLock(ctx: Context, settings: ModuleSettingsSnapshot): Boolean {
+        if (settings.chooserWhileLocked) {
+            env.info("[WATCHER] chooserWhileLocked=true → show even while locked")
+            return false
+        }
+        return isScreenLocked(ctx)
+    }
+
+    private fun isScreenLocked(ctx: Context): Boolean {
+        return runCatching {
+            val km = ctx.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager ?: run {
+                env.warn("[WATCHER] KeyguardManager unavailable; assuming unlocked")
+                return@runCatching false
+            }
+            km.isKeyguardLocked
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Defers [decision] until the user unlocks, by polling the keyguard state on the
+     * main handler. Unlock is detected via [isScreenLocked] flipping to false, then we
+     * launch the previously-stored chooser. Any previously deferred choice is dropped.
+     */
+    private fun deferChooserUntilUnlock(ctx: Context, decision: UsbPolicyEngine.Decision.Ask) {
+        cancelDeferredChooser()
+        deferredAsk = decision
+        val generation = ++deferredPollGeneration
+        env.info("[WATCHER] defer chooser (gen=$generation): polling keyguard every ${LOCK_UNLOCK_POLL_MS}ms up to ${LOCK_UNLOCK_MAX_ATTEMPTS} attempts")
+        val runnable = object : Runnable {
+            private var attempts = 0
+            override fun run() {
+                if (generation != deferredPollGeneration) return  // superseded
+                attempts++
+                if (attempts > LOCK_UNLOCK_MAX_ATTEMPTS) {
+                    env.warn("[WATCHER] lock-poll exhausted after $attempts tries; dropping deferred chooser")
+                    cancelDeferredChooser()
+                    return
+                }
+                if (!isScreenLocked(ctx)) {
+                    val ask = deferredAsk
+                    cancelDeferredChooser()
+                    if (ask == null) return
+                    env.info("[WATCHER] keyguard unlocked after ${attempts} polls; launching deferred chooser host=${ask.hostName}")
+                    runCatching { launchChooser(ctx, ask) }
+                        .onFailure { env.error("[WATCHER] deferred launchChooser threw", it) }
+                } else {
+                    handler.postDelayed(this, LOCK_UNLOCK_POLL_MS)
+                }
+            }
+        }
+        deferredPollRunnable = runnable
+        handler.postDelayed(runnable, LOCK_UNLOCK_POLL_MS)
+    }
+
+    /** Drops any deferred chooser (disconnect/new connect) and stops the lock poll. */
+    private fun cancelDeferredChooser() {
+        deferredPollGeneration += 1
+        deferredAsk = null
+        val runnable = deferredPollRunnable ?: return
+        deferredPollRunnable = null
+        handler.removeCallbacks(runnable)
     }
 
     private fun handleDisconnect() {
@@ -323,6 +419,9 @@ internal class UsbStateWatcher(
         // And explicitly tell any on-screen chooser activity to finish itself —
         // otherwise the window (launched via startActivity) stays up after unplug.
         dismissChooserActivity()
+        // Drop any lock-deferred chooser: the cable is gone, no point re-launching
+        // on a later unlock.
+        cancelDeferredChooser()
         // A deleted host must not be re-applied via the stale replay cache.
         consumeAndResolveHostDeleted()
         env.info("[WATCHER] handleDisconnect ENTER; cancelled pending-apply poll loop generation=$pendingPollGeneration")

@@ -16,6 +16,9 @@ object ModuleSettings {
     const val KEY_DEFAULT_MODE = "default_mode"
     const val KEY_DEFAULT_ADB = "default_adb"
     const val KEY_DISCONNECT_AUTO_OFF_ADB = "disconnect_auto_off_adb"
+    /** Whether to show the USB mode chooser while the device is locked. Default OFF:
+     *  the chooser is deferred until the user unlocks. */
+    const val KEY_CHOOSER_WHILE_LOCKED = "chooser_while_locked"
     const val KEY_LAST_HOST_KEY = "last_host_key"
     const val KEY_LAST_HOST_NAME = "last_host_name"
     const val KEY_LAST_LOAD_INFO = "last_load_info"
@@ -43,6 +46,10 @@ object ModuleSettings {
 
     fun disconnectAutoOffAdb(): Boolean =
         prefs().getBoolean(KEY_DISCONNECT_AUTO_OFF_ADB, true)
+
+    /** Whether the USB mode chooser may appear while the screen is locked. */
+    fun chooserWhileLocked(): Boolean =
+        prefs().getBoolean(KEY_CHOOSER_WHILE_LOCKED, false)
 
     fun isFirstLaunchDone(): Boolean = prefs().getBoolean(KEY_FIRST_LAUNCH_DONE, false)
 
