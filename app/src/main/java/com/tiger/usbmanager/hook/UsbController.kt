@@ -52,7 +52,7 @@ internal class UsbController(
             env.warn("Framework path incomplete; invoking root fallback")
             rootFallback.applyConfig(mode, adb)
         } else null
-        val effectiveModeOk = modeOk || (rootOk?.getOrNull(0) == true)
+        val effectiveModeOk = modeOk || (rootOk?.getOrNull(0) == true || rootOk?.getOrNull(1) == true)
         val effectiveAdbOk = adbOk || ((rootOk?.getOrNull(2) ?: false) || (rootOk?.getOrNull(3) ?: false))
         env.info("applyConfig effective: modeOk=$effectiveModeOk adbOk=$effectiveAdbOk (root fallback ran=${rootOk != null})")
         return effectiveModeOk && effectiveAdbOk

@@ -2,7 +2,11 @@ package com.tiger.usbmanager.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
@@ -32,7 +36,7 @@ import com.tiger.usbmanager.policy.UsbMode
  *
  * No matter how the user closes this activity (+ve / -ve / back / swipe-away)
  * we send an `ACTION_CHOOSER_CLOSED` broadcast to system_server so the watcher
- * can decide whether "disconnect auto-off ADB" should apply on the next unplug.
+ * knows whether to cancel the pending-apply poll and how to seed the replay cache.
  * Paths:
  *   - Positive button → outcome="confirmed" (also sends APPLY_USB_CONFIG)
  *   - Negative button → outcome="cancelled"
@@ -45,14 +49,56 @@ class UsbChooserActivity : Activity() {
     private lateinit var hostKey: String
     private var outcomeReported: Boolean = false
 
+    /**
+     * Listens for system_server's ACTION_DISMISS_CHOOSER (sent when the USB cable is
+     * unplugged while we're still on screen). On receipt we finish ourselves so the
+     * chooser window doesn't linger after the cable is pulled. Registration is scoped
+     * to the activity's visible lifetime (onStart/onStop) and guarded by token.
+     */
+    private val dismissReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val receivedToken = intent.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0)
+            if (receivedToken != token) return // not ours; ignore
+            finish()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(ModuleConstants.ACTION_DISMISS_CHOOSER)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(dismissReceiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(dismissReceiver, filter)
+            }
+        }.onFailure { /* best-effort; chooser still closable via buttons */ }
+    }
+
+    override fun onStop() {
+        runCatching { unregisterReceiver(dismissReceiver) }.onFailure { }
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         hostKey = intent?.getStringExtra(ModuleConstants.EXTRA_HOST_KEY).orEmpty()
         val hostName = intent?.getStringExtra(ModuleConstants.EXTRA_HOST_NAME).orEmpty()
         val preselectMode = UsbMode.fromWire(intent?.getStringExtra(ModuleConstants.EXTRA_USB_MODE))
-        val preselectAdb = intent?.getBooleanExtra(ModuleConstants.EXTRA_ADB_ENABLED, true) ?: true
+        val rawPreselectAdb = intent?.getBooleanExtra(ModuleConstants.EXTRA_ADB_ENABLED, true) ?: true
         token = intent?.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0) ?: 0
+
+        // This activity is exported so system_server can start it, which means any
+        // third-party app can also launch it with forged extras (e.g. ADB pre-ticked)
+        // as a social-engineering vector. When the caller is an untrusted app we
+        // refuse to honour a pre-selected "ADB on" — the user must explicitly check
+        // ADB themselves. A launch from system_server yields a null calling activity
+        // (system isn't an activity), so those legitimate launches still work.
+        val caller = getCallingActivity()
+        val trustedPublisher = caller == null || caller.packageName == ModuleConstants.MODULE_PACKAGE
+        val preselectAdb = rawPreselectAdb && trustedPublisher
 
         val padding = dp(16)
         val root = LinearLayout(this).apply {
@@ -117,10 +163,10 @@ class UsbChooserActivity : Activity() {
                 val name = nameInput.text?.toString().orEmpty().ifBlank { hostName }
 
                 // 1) Apply the actual USB/ADB setting + host save.
-                //    "auto" (auto-apply on next connection) is only valid when
-                //    the user also asked us to remember this computer. There's
-                //    no point storing "auto" for something we'll never save.
-                val auto = remember && remember
+                //    "auto" (auto-apply on next connection) only makes sense when the
+                //    user also asked us to remember this computer, so it tracks the
+                //    "remember" checkbox.
+                val auto = remember
                 UsbConfigSender.apply(
                     context = this,
                     mode = selectedMode,
@@ -130,8 +176,8 @@ class UsbChooserActivity : Activity() {
                     hostKey = hostKey,
                     hostName = name,
                 )
-                // 2) Tell watcher: user confirmed the dialog, so don't flip ADB
-                //    off if the cable is unplugged within ~30s.
+                // 2) Tell the watcher the user confirmed the dialog (seeds the
+                //    non-remembered replay cache if applicable).
                 reportOutcome("confirmed")
                 Toast.makeText(
                     this,

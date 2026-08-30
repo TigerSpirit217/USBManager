@@ -33,6 +33,14 @@ class HostProvider : ContentProvider() {
      *  most one chooser live at a time. */
     @Volatile private var pendingApplyJson: String? = null
 
+    /**
+     * True once the module app deletes any host (via METHOD_NOTE_HOST_DELETED), until
+     * system_server consumes it via METHOD_CONSUME_HOST_DELETED. Lets the watcher drop
+     * the non-remembered replay cache the next time it runs, so a deleted host doesn't
+     * keep being silently re-applied across a reconnect.
+     */
+    @Volatile private var hostDeletedFlag = false
+
     override fun onCreate(): Boolean {
         val ctx = context ?: return false
         ModuleSettings.init(ctx)
@@ -42,15 +50,29 @@ class HostProvider : ContentProvider() {
 
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
         return runCatching {
-            // Mutating operations require the shared BRIDGE_TOKEN in extras. Analogous
-            // to the broadcast receiver: the provider is exported (system_server can't
-            // hold a module signature permission), so writes are gated by the token
-            // while read-only queries remain open.
+            // ----- UID authorization (authoritative gate, applies to ALL methods,
+            //       read and write alike). -----
+            // The provider must be exported so system_server can reach it, but the
+            // BRIDGE_TOKEN is a compile-time constant any app can extract from the
+            // APK. It is therefore only defense-in-depth. The real gate is the
+            // binder calling UID, which cannot be spoofed: only system_server
+            // (SYSTEM_UID 1000) and the module app's own process qualify.
+            val callingUid = android.os.Binder.getCallingUid()
+            if (callingUid != android.os.Process.SYSTEM_UID &&
+                callingUid != android.os.Process.myUid()
+            ) {
+                Log.w(TAG, "call($method) blocked: uid=$callingUid not authorized")
+                return@runCatching null
+            }
+
+            // Mutating operations additionally require the shared BRIDGE_TOKEN in
+            // extras, as a second layer on top of the UID check.
             when (method) {
                 UsbBridgeContract.METHOD_SAVE_HOST,
                 UsbBridgeContract.METHOD_DELETE_HOST,
                 UsbBridgeContract.METHOD_PUT_PENDING_APPLY,
                 UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY,
+                UsbBridgeContract.METHOD_NOTE_HOST_DELETED,
                 -> {
                     val tok = extras?.getString(UsbBridgeContract.KEY_BRIDGE_TOKEN)
                     if (tok != ModuleConstants.BRIDGE_TOKEN) {
@@ -64,6 +86,8 @@ class HostProvider : ContentProvider() {
                 UsbBridgeContract.METHOD_LIST_HOSTS -> handleListHosts()
                 UsbBridgeContract.METHOD_SAVE_HOST -> handleSaveHost(extras)
                 UsbBridgeContract.METHOD_DELETE_HOST -> handleDeleteHost(arg)
+                UsbBridgeContract.METHOD_NOTE_HOST_DELETED -> handleNoteHostDeleted()
+                UsbBridgeContract.METHOD_CONSUME_HOST_DELETED -> handleConsumeHostDeleted()
                 UsbBridgeContract.METHOD_GET_DEFAULTS -> handleGetDefaults()
                 UsbBridgeContract.METHOD_GET_SETTINGS -> handleGetSettings()
                 UsbBridgeContract.METHOD_PUT_PENDING_APPLY -> handlePutPendingApply(extras)
@@ -119,8 +143,28 @@ class HostProvider : ContentProvider() {
     }
 
     private fun handleDeleteHost(hostKey: String?): Bundle {
-        hostKey?.let { store.delete(it) }
+        if (!hostKey.isNullOrBlank()) {
+            store.delete(hostKey)
+            // Signal system_server that a saved host is gone, so it can drop any
+            // per-host grace/replay state (see hostDeletedFlag doc).
+            hostDeletedFlag = true
+        }
         return Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, true) }
+    }
+
+    /** App-side: set the deleted-host flag (used by the watcher to purge stale state). */
+    private fun handleNoteHostDeleted(): Bundle {
+        hostDeletedFlag = true
+        Log.i("HostProvider", "handleNoteHostDeleted: flag set")
+        return Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, true) }
+    }
+
+    /** system_server-side: read-and-clear the deleted-host flag. */
+    private fun handleConsumeHostDeleted(): Bundle {
+        val v = hostDeletedFlag
+        hostDeletedFlag = false
+        Log.i("HostProvider", "handleConsumeHostDeleted: consumed=$v")
+        return Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, v) }
     }
 
     private fun handleGetDefaults(): Bundle {

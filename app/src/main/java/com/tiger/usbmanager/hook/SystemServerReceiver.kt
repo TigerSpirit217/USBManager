@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import com.tiger.usbmanager.ModuleConstants
@@ -46,8 +47,30 @@ internal class SystemServerReceiver(
                 android.os.Binder.getCallingUidOrThrow()
             }.getOrNull() ?: android.os.Process.myUid()
 
-            // ----- Token gating (only for our custom bridge actions, not the
-            //       public system ACTION_USB_STATE broadcast). -----
+            // ----- UID authorization (authoritative gate). -----
+            // BRIDGE_TOKEN is a compile-time constant embedded in the APK, so any
+            // third-party app that decompiles it could forge our bridge broadcasts.
+            // The calling UID, however, cannot be spoofed. Only two senders are
+            // legitimate: the module app process itself (UsbConfigSender, uid == the
+            // module app's uid) and system_server (SYSTEM_UID 1000, which emits the
+            // public ACTION_USB_STATE broadcast). Anything else is rejected before we
+            // even look at the token.
+            val systemUid = android.os.Process.SYSTEM_UID
+            val moduleUid = runCatching {
+                context.packageManager.getApplicationInfo(
+                    ModuleConstants.MODULE_PACKAGE, 0,
+                ).uid
+            }.getOrDefault(-1)
+            if (callingUid != systemUid && callingUid != moduleUid) {
+                env.warn(
+                    "[RX] Drop broadcast $action from uid=$callingUid pkg=$callerPkg: " +
+                        "not an authorized sender (expected system=$systemUid or module=$moduleUid)",
+                )
+                return
+            }
+
+            // ----- Token gating (defense-in-depth; only for our custom bridge
+            //       actions, not the public system ACTION_USB_STATE broadcast). -----
             if (action in listOf(
                     ModuleConstants.ACTION_APPLY_USB_CONFIG,
                     ModuleConstants.ACTION_CHOOSER_CLOSED,
@@ -88,7 +111,18 @@ internal class SystemServerReceiver(
         }
         env.info("[RX] Registering bridge receiver actions=${bridgeFilter.actionsIterator().asSequence().toList()} ctxPkg=${context.packageName} uid=${android.os.Process.myUid()} (token-gated, no perm)")
         runCatching {
-            context.registerReceiver(receiver, bridgeFilter)
+            // Android 13+ (API 33+) REQUIRES an explicit exported/not-exported flag
+            // on ANY dynamic registerReceiver — without it registerReceiver() throws
+            // SecurityException (seen on NothingOS / Android 16). The bridge receiver
+            // must be EXPORTED because the originating broadcasts come from the module
+            // app (a different uid). Note: exported is safe here because we still
+            // gate every intent on the BRIDGE_TOKEN + calling-uid check in onReceive.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, bridgeFilter, Context.RECEIVER_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                context.registerReceiver(receiver, bridgeFilter)
+            }
             env.info("[RX] Bridge receiver registered OK")
         }.onFailure { env.error("[RX] Failed to register bridge receiver", it) }
 
@@ -105,8 +139,15 @@ internal class SystemServerReceiver(
             runCatching {
                 // No permission: USB_STATE is a protected sticky broadcast; only the
                 // system sends it, so receiving it never leaks data to unprivileged
-                // callers. We pass null for the permission parameter.
-                context.registerReceiver(receiver, usbFilter)
+                // callers. We pass null for the permission parameter. Android 13+ still
+                // needs an explicit flag; NOT_EXPORTED is enough (only the system emits
+                // this protected broadcast).
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.registerReceiver(receiver, usbFilter, Context.RECEIVER_NOT_EXPORTED)
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.registerReceiver(receiver, usbFilter)
+                }
                 env.info("[RX] ACTION_USB_STATE fallback receiver registered OK")
             }.onFailure { env.error("[RX] Failed to register USB_STATE fallback receiver", it) }
         } else {
@@ -191,9 +232,9 @@ internal class SystemServerReceiver(
                 env.info("[RX] remember=$remember hostKey=${hostKey.isNotBlank()}; skipping save")
             }
 
-            // Also record this APPLY as a confirmed user choice so the
-            // disconnect-auto-off logic skips it for ~30 s.
-            runCatching { watcher?.onChooserApplied(mode, adb, hostKey) }
+            // Record this APPLY as the confirmed choice (feeds the non-remembered
+            // replay cache on the next connect).
+            runCatching { watcher?.onChooserApplied(mode, adb, hostKey, remember) }
                 .onFailure { env.error("[RX] watcher.onChooserApplied threw", it) }
         }
     }

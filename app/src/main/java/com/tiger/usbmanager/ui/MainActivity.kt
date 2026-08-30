@@ -21,6 +21,7 @@ import android.widget.Toast
 import com.tiger.usbmanager.ModuleActivationCheck
 import com.tiger.usbmanager.ModuleSettings
 import com.tiger.usbmanager.R
+import com.tiger.usbmanager.bridge.HostProviderClient
 import com.tiger.usbmanager.policy.HostInfo
 import com.tiger.usbmanager.policy.HostStore
 import com.tiger.usbmanager.policy.UsbMode
@@ -37,6 +38,7 @@ import com.tiger.usbmanager.policy.UsbMode
 class MainActivity : Activity() {
 
     private lateinit var store: HostStore
+    private val hostClient: HostProviderClient by lazy { HostProviderClient(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,7 +96,7 @@ class MainActivity : Activity() {
             "• 基于 ADB RSA Host Key 识别连接的电脑，不依赖 VID/PID",
             "• 已知可信电脑：自动应用保存的 USB 模式 + ADB 策略，无需弹窗",
             "• 未知电脑：弹窗询问，可选择「记住此电脑」保存策略",
-            "• 拔出数据线后自动关闭 ADB（用户刚确定打开 ADB 时 30 秒内不关），确保 adbd 停止",
+            "• 拔出数据线后自动关闭 ADB（可关闭该行为），确保 adbd 停止",
             "• 日志直接写入 LSPosed：打开 LSPosed Manager → 模块 → USBManager → ⋮ 菜单 → 查看日志",
         )
         features.forEach { line ->
@@ -400,6 +402,10 @@ class MainActivity : Activity() {
                     .setMessage(host.name)
                     .setPositiveButton(R.string.dialog_confirm) { _, _ ->
                         store.delete(host.hostKey)
+                        // Tell system_server the host is gone so it stops applying
+                        // stale ADB/mode grace state for it (fixes "deleted host still
+                        // keeps ADB on after unplug / no chooser on reconnect").
+                        hostClient.noteHostDeleted()
                         refreshHosts()
                         Toast.makeText(this@MainActivity, R.string.settings_deleted, Toast.LENGTH_SHORT).show()
                     }
@@ -496,6 +502,7 @@ class MainActivity : Activity() {
                     .setMessage(R.string.settings_clear_confirm)
                     .setPositiveButton(R.string.dialog_confirm) { _, _ ->
                         store.clear()
+                        hostClient.noteHostDeleted()
                         refreshHosts()
                         Toast.makeText(this@MainActivity, R.string.settings_cleared, Toast.LENGTH_SHORT).show()
                     }

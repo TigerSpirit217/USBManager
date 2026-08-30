@@ -111,6 +111,37 @@ class HostProviderClient(context: Context) {
         return ok || localRemoved
     }
 
+    /**
+     * App-side: signal system_server that a host was deleted (used by MainActivity UI
+     * after store.delete) so the watcher can purge stale per-host grace/replay state.
+     */
+    fun noteHostDeleted() {
+        runCatching {
+            resolver.call(
+                UsbBridgeContract.HOST_URI,
+                UsbBridgeContract.METHOD_NOTE_HOST_DELETED,
+                null,
+                tokenFor(null),
+            )
+        }.onFailure { Log.e(TAG, "[CLIENT] noteHostDeleted call failed", it) }
+    }
+
+    /**
+     * system_server-side: read-and-clear the deleted-host flag. Returns true if the app
+     * reported a host deletion since the last consume (call on USB connect / disconnect).
+     */
+    fun consumeHostDeleted(): Boolean {
+        return runCatching {
+            val result = resolver.call(
+                UsbBridgeContract.HOST_URI,
+                UsbBridgeContract.METHOD_CONSUME_HOST_DELETED,
+                null,
+                tokenFor(null),
+            )
+            result?.getBoolean(UsbBridgeContract.KEY_RESULT, false) == true
+        }.onFailure { Log.e(TAG, "[CLIENT] consumeHostDeleted call failed", it) }.getOrDefault(false)
+    }
+
     /** Persists (insert or update) the given host. */
     fun save(host: HostInfo): Boolean {
         val extras = tokenFor(Bundle().apply {

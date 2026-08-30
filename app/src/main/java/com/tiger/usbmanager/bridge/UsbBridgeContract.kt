@@ -33,6 +33,21 @@ object UsbBridgeContract {
     /** arg = hostKey; deletes. */
     const val METHOD_DELETE_HOST = "delete_host"
 
+    /**
+     * App→system signal that a host was deleted (via the module app UI). arg = hostKey
+     * removed. The watcher pulls this on the next connect so it can purge any
+     * non-remembered replay cache state that would otherwise silently re-apply the
+     * deleted host's config on a reconnect.
+     */
+    const val METHOD_NOTE_HOST_DELETED = "note_host_deleted"
+
+    /**
+     * system_server→app poll/consume of the deleted-host flag set by
+     * [METHOD_NOTE_HOST_DELETED]. Atomic read-and-clear. Same provider method used by
+     * HostProvider to clear the flag once the watcher has seen it.
+     */
+    const val METHOD_CONSUME_HOST_DELETED = "consume_host_deleted"
+
     /** Returns a JSON object {mode, adb} describing defaults for unknown hosts. */
     const val METHOD_GET_DEFAULTS = "get_defaults"
 

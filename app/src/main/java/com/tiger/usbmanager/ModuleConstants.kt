@@ -28,6 +28,14 @@ object ModuleConstants {
     const val ACTION_CHOOSER_CLOSED = "$MODULE_PACKAGE.action.CHOOSER_CLOSED"
 
     /**
+     * Sent from system_server to the module app when the USB cable is unplugged while
+     * the chooser is still on screen. The chooser activity listens for it and finishes
+     * itself, so a stale chooser window doesn't linger after the cable is pulled.
+     * Carries [EXTRA_TOKEN] so the activity only closes the dialog it owns.
+     */
+    const val ACTION_DISMISS_CHOOSER = "$MODULE_PACKAGE.action.DISMISS_CHOOSER"
+
+    /**
      * Token embedded in every bridge broadcast / provider call (app ⇄ system_server)
      * so the receiver / provider can drop spoofed traffic.
      *
