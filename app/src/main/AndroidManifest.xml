@@ -2,10 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-sdk tools:overrideLibrary="io.github.libxposed.service,io.github.libxposed.service.interfaces" />
-
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-
     <application
         android:name=".UsbManagerApp"
         android:allowBackup="true"
@@ -19,44 +15,13 @@
         android:theme="@style/Theme.USBManager"
         tools:targetApi="37">
 
-        <activity
-            android:name=".ui.MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <!--
-            Chooser dialog launched by the system_server hook when a USB host connects
-            and a user decision is required. Exported so system_server (uid 1000) can
-            start it across the process boundary.
-        -->
+        <!-- Chooser launched by the KernelSU service through ActivityManager. -->
         <activity
             android:name=".ui.UsbChooserActivity"
             android:exported="true"
             android:excludeFromRecents="true"
             android:launchMode="singleInstance"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
             android:theme="@style/Theme.USBManager.Dialog" />
-
-        <!--
-            Single source of truth for the known-host database. system_server queries
-            it via ContentResolver to resolve policy synchronously when USB connects.
-            It is declared `android:exported="true"` (no signature permission) because
-            system_server (uid 1000) is signed with the PLATFORM key and can NEVER hold
-            a signature-protected module permission; requiring one would make every
-            system_server call throw SecurityException. Cross-process trust is established
-            instead by the BRIDGE_TOKEN inside each call's extras, exactly like the
-            broadcast receiver path.
-        -->
-        <provider
-            android:name=".bridge.HostProvider"
-            android:authorities="com.tiger.usbmanager.hosts"
-            android:exported="true"
-            android:grantUriPermissions="false" />
 
     </application>
 

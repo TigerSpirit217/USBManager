@@ -9,3 +9,5 @@
 /.kotlin
 /.idea
 keystore.properties
+/kernelsu/USBManager-KernelSU-*.zip
+/kernelsu/module/usbmanager.apk

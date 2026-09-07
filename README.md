@@ -1,161 +1,64 @@
-# USBManager — Android USB 智能管理模块
+# USBManager
 
-一个基于 **LSPosed** 框架的 Android 系统模块，自动管理 USB 模式与 ADB 开关，根据已识别的电脑记忆配置，实现「即插即用」。
+USBManager 是一个由 **KernelSU 后台模块**和**无桌面图标的弹窗 APK**组成的 USB 模式选择器。连接电脑时，设备先保持仅充电；解锁后弹出一次选择窗口，由用户决定本次连接使用仅充电、MTP 文件传输或 USB 网络共享，并可同时开启 ADB 调试。
 
-## 功能
+[下载最新 KernelSU 安装包](https://github.com/QWEOVO123/USBManager/releases/latest)
 
-* **自动 USB 模式切换**：连接电脑后自动切换到 MTP（文件传输）、RNDIS（网络共享）、MIDI 或仅充电模式
+## 工作方式
 
-* **智能 ADB 控制**：根据主机自动开启或关闭 USB 调试，拔线可选自动关闭 ADB
+1. `post-fs-data.sh` 在开机早期关闭 ADB，并把 USB 功能恢复为仅充电。
+2. `service.sh` 常驻监听 USB 电源、USB role 和 gadget 状态，排除 OTG/Host 模式以及 DCP、HVDCP 等纯充电器。
+3. 连接电脑后，模块立即保持仅充电并关闭 ADB。设备已解锁且屏幕点亮时，模块通过 ActivityManager 启动选择窗口；锁屏或息屏时不会弹窗。
+4. APK 把本次选择和会话 Token 写入应用专属命令文件。Root 服务校验 Token 后，使用系统 USB 服务切换功能并按复选框状态启停 ADB。
+5. 拔线、取消或关闭窗口会恢复仅充电并关闭 ADB。选择只对当前连接有效，不识别电脑、不读取 ADB Key，也不保存设备记录。
 
-* **设备记忆**：记住每台电脑的配置（模式 + ADB + 是否自动应用），下次连接自动生效
+APK 只负责显示窗口和提交选择，Root 操作全部由 KernelSU 脚本执行。APK 没有 Launcher 入口，因此不会出现在桌面或应用抽屉中。
 
-* **选择弹窗**：未识别的电脑弹出选择器，让用户决定本次配置和是否记住
+## 安装与卸载
 
-* **重枚举保护**：USB 模式切换（如仅充电→MTP）导致设备重新枚举时，不会重复弹窗扰民
+发布包已经包含 APK，不需要单独安装：
 
-* **Root 回退**：当框架 API 不可用时自动尝试 `su` 命令写入系统属性（要求能使用root权限）
+1. 下载 `USBManager-KernelSU-v14.zip`。
+2. 在 KernelSU 管理器中选择“模块 → 从本地安装”，选择该 ZIP。
+3. 安装完成后重启设备。
 
-## 安装
+安装时，`customize.sh` 会从 ZIP 根目录执行 `pm install -r usbmanager.apk`。升级时直接安装新版模块即可。删除模块后，`uninstall.sh` 会自动卸载 `com.tiger.usbmanager` 并清理 `/data/adb/usbmanager`。
 
-### 前置条件
+模块包结构如下：
 
-* 已解锁 Bootloader 并 Root 的 Android 设备
-
-* 已安装 **LSPosed**（Zygisk 或全局命名空间模式均可）
-
-* Android 12+（推荐）或 11
-
-### 步骤
-
-1. 从 [Releases](../../releases) 下载最新 APK
-2. 安装 APK 到设备
-3. 打开 **LSPosed Manager** → 模块列表 → 勾选 **USBManager**
-4. **作用域**：勾选 `system`（系统框架）
-5. 重启 System UI 或重启设备
-6. 从桌面启动 USBManager 应用，查看使用说明和已保存的主机列表
-
-## 使用
-
-### 首次连接
-
-1. 插入 USB 数据线连接到电脑
-2. 弹出选择器，选择 USB 模式（仅充电/文件传输/MIDI/网络共享）和 ADB 开关
-3. 勾选「记住此电脑」以保存配置
-4. 点击「确定」生效
-
-### 已知主机（已保存）
-
-连接已保存且标记为「自动应用」的电脑 → 静默应用配置，无弹窗。
-连接已保存但未标记「自动应用」的电脑 → 弹出选择器，预填已保存的配置供修改。
-
-### 管理主机
-
-打开 USBManager 应用，可查看所有已保存的主机列表，支持：
-
-* 编辑名称、USB 模式、ADB 开关、自动应用开关
-
-* 删除主机记录
-
-### 默认设置
-
-* 未知主机默认 USB 模式：**仅充电**
-
-* 未知主机默认 ADB：**关闭**
-
-* 拔线自动关闭 ADB：**开启**
-
-* 首次连接弹出选择器时默认不勾选「记住此电脑」
-
-可通过 USBManager 应用 → 右上角设置图标修改默认值。
-
-## 安全模型
-
-模块在 system\_server 与模块应用之间通过 `ContentProvider` 与广播交换配置，因此对跨进程调用做了如下防护：
-
-* **调用方 UID 白名单**：`ContentProvider` 与广播接收器仅接受系统进程与模块自身进程的调用，其余来源一律拒绝。UID 无法伪造，是真正的鉴权依据。
-
-* **桥接 Token（纵深防御）**：在 UID 鉴权之上再校验编译期桥接 Token。即使 Token 被反编译提取，第三方应用也因 UID 不匹配而无法滥用（例如伪造广播强制开启 ADB）。
-
-* **选择器调用来源校验**：非可信来源启动 USB 选择器时，不会预先勾选「ADB 开启」，防止钓鱼诱导。
-
-## 构建
-
-```bash
-# 克隆仓库
-git clone https://github.com/your-username/USBManager.git
-cd USBManager
-
-# 使用 Gradle 构建
-./gradlew :app:assembleRelease
+```text
+USBManager-KernelSU-v14.zip
+├── module.prop
+├── customize.sh
+├── post-fs-data.sh
+├── service.sh
+├── common.sh
+├── usbmanagerctl.sh
+├── uninstall.sh
+└── usbmanager.apk
 ```
 
-## 调试
+这些文件必须直接位于 ZIP 根目录，不能在外面再套一层文件夹，否则 KernelSU 无法把它识别为模块。
 
-### 查看日志
+## 本地构建
 
-模块日志输出到 `USBManager` tag。可通过 LSPosed Manager 查看：
+构建环境需要 JDK 21、Android SDK 和 Python 3。打包器会先调用 Gradle 构建 Debug APK，再把 APK 和 `kernelsu/module` 中的脚本一起写入可刷入的 ZIP，并为 shell 脚本记录 Unix 可执行权限。
 
-1. 打开 **LSPosed Manager**
-2. 点击 **日志** → 搜索 **USBManager**
-3. 查看实时日志
+Windows：
 
-或者使用 ADB Logcat：
-
-```bash
-adb logcat -s USBManager
+```powershell
+.\kernelsu\build-module.ps1
 ```
 
-关键日志标签：
+Linux 或 macOS：
 
-* `[WATCHER]` — USB 事件处理流程
+```bash
+python3 kernelsu/package_module.py
+```
 
-* `[RX]` — 广播接收器
+输出文件：
 
-* `[HOOK]` — Hook 初始化
+- `app/build/outputs/apk/debug/app-debug.apk`
+- `kernelsu/USBManager-KernelSU-v14.zip`
 
-* `[CLIENT]` — ContentProvider 通信
-
-* `[CONTROLLER]` — USB 模式/ADB 配置应用
-
-## 常见问题
-
-### Q: 模块已激活，但插入 USB 无反应？
-
-A: 检查 LSPosed 作用域是否勾选了 `system`。重启设备后重试。查看 LSPosed 日志确认模块是否正常注入。
-
-### Q: 拔线时会弹窗/闪通知？
-
-A: 部分 OEM 在 USB 拆除或模式切换（如仅充电→文件传输）过程中会发送瞬时「已连接」/「断开」信号。模块内置两段去抖：连接信号 300 ms、断开信号 800 ms，并在「断开→重连」的重枚举序列中自动取消待执行的断开任务，从而避免误弹窗、误关 ADB。若仍出现，请查看 `[WATCHER]` 日志确认去抖是否生效。
-
-### Q: 选择配置后 USB 状态没变？
-
-A: Android 14+ 已将 ADB 从 USB function 字符串中分离，模块通过独立路径设置 ADB。如果系统 API 被限制，模块会尝试 Root 回退（需要 `su` 可用）。
-
-### Q: 修改已保存设备配置后不生效？
-
-A: 模块维护 APP 数据库和 system\_server 本地缓存双副本，修改后会自动同步。如果 APP 进程被杀后插入 USB，设备仍会使用最新配置。
-
-### Q: 拔出数据线后再插入，弹窗不消失 / 再次连接不弹窗且 ADB 仍开着？
-
-A: 这类「短期状态残留」问题请升级到 w/ 修复的版本。修复内容包括：
-
-* **拔线即消失**：拔线时主动向选择器界面发送关闭广播，处理后台/通知路径打开的选择器不会残留。
-
-* **删除配置后不再残留**：删除/清空已保存主机时，会通过 ContentProvider 信号通知 system\_server 清除该主机相关的短期状态（重放缓存与「30 秒内不关 ADB」宽限期），从而避免「删除后立刻拔线，ADB 仍开」或「删除后重连不再弹窗」。
-
-* **Android 13+ 兼容**：修复动态广播接收器缺少 exported 标志导致的注册失败（SDK 33+ 强制要求，否则 `ACTION_CHOOSER_CLOSED` 等广播无法到达 system\_server）。
-
-## 许可证
-
-本项目使用木兰公共许可证，第 2 版（Mulan PubL v2）。
-完整授权见 [LICENSE](https://license.coscl.org.cn/MulanPubL-2.0)。
-
-## 源码与发布
-
-* 源码仓库：<https://github.com/TigerSpirit217/USBManager>
-
-* 发布页面：<https://github.com/TigerSpirit217/USBManager/releases>
-
-* 反馈Issues：<https://github.com/TigerSpirit217/USBManager/issues>
-
+每次推送和 Pull Request 都会由 GitHub Actions 构建模块并保存 workflow artifact；发布 GitHub Release 时，构建出的 ZIP 会自动附加到该 Release。

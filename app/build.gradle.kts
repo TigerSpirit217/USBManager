@@ -13,8 +13,8 @@ android {
         applicationId = "com.tiger.usbmanager"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "2"
+        versionCode = 14
+        versionName = "14"
     }
 
     buildTypes {
@@ -22,10 +22,6 @@ android {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
-    }
-
-    buildFeatures {
-        buildConfig = true
     }
 
     packaging {
@@ -67,11 +63,8 @@ configurations.all {
 }
 
 dependencies {
-    compileOnly(libs.libxposed.api)
-    implementation(libs.libxposed.service)
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)
     implementation(libs.constraintlayout)
-    implementation(libs.gson)
 }

@@ -1,0 +1,6 @@
+id=usbmanager_ksu
+name=USBManager KernelSU Backend
+version=v14
+versionCode=14
+author=USBManager
+description=Boots charge-only, suppresses UI while locked, and launches a hidden one-time charging/MTP/RNDIS and ADB chooser when unlocked.
