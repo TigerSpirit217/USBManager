@@ -48,7 +48,7 @@ jobs:
 
       - name: Sync files via Contents API
         run: |
-          for FILE in README.md LICENSE; do
+          for FILE in README.md LICENSE README_ENG.md; do
             [ ! -f "$FILE" ] && echo "⚠️ $FILE 不存在，跳过" && continue
 
             CONTENT_B64=$(base64 -w 0 "$FILE")
