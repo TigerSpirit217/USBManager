@@ -4,8 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 
 /**
- * Generic module settings (default behavior for unknown hosts, auto-off toggle).
- * The known-host database itself lives in [com.tiger.usbmanager.policy.HostStore], not here.
+ * Generic module settings (default mode, default ADB, disconnect auto-off toggle).
  *
  * Both the module app and system_server read these through the same file. The
  * module app accesses it directly; system_server reaches it via the HostProvider
@@ -19,9 +18,6 @@ object ModuleSettings {
     /** Whether to show the USB mode chooser while the device is locked. Default OFF:
      *  the chooser is deferred until the user unlocks. */
     const val KEY_CHOOSER_WHILE_LOCKED = "chooser_while_locked"
-    const val KEY_LAST_HOST_KEY = "last_host_key"
-    const val KEY_LAST_HOST_NAME = "last_host_name"
-    const val KEY_LAST_LOAD_INFO = "last_load_info"
     const val KEY_FIRST_LAUNCH_DONE = "first_launch_done"
 
     private lateinit var prefsBacking: SharedPreferences

@@ -2,8 +2,8 @@ package com.tiger.usbmanager
 
 /**
  * Cross-process constants: package name, broadcast actions, intent extras and the
- * ContentProvider authority used to share the host database between the
- * system_server hook and the module app UI.
+ * ContentProvider authority used to share module settings and the pending-apply
+ * mailbox between the system_server hook and the module app UI.
  */
 object ModuleConstants {
 
@@ -58,12 +58,8 @@ object ModuleConstants {
 
     // ---- Intent extras ----
 
-    const val EXTRA_HOST_KEY = "host_key"
-    const val EXTRA_HOST_NAME = "host_name"
     const val EXTRA_USB_MODE = "usb_mode"
     const val EXTRA_ADB_ENABLED = "adb_enabled"
-    const val EXTRA_REMEMBER = "remember"
-    const val EXTRA_AUTO = "auto"
     const val EXTRA_STATUS = "status"
     const val EXTRA_TOKEN = "token"
     /** Value: "confirmed" | "cancelled" | "dismissed". */
@@ -77,8 +73,13 @@ object ModuleConstants {
 
     // ---- SharedPreferences file names ----
 
-    /** Holds the known-host database (JSON blob). */
+    /** Legacy known-host database (JSON blob). Retained only for one-time cleanup
+     *  migration: the identification/memory feature has been removed. */
     const val PREFS_HOSTS = "usbmanager_hosts"
+
+    /** system_server-side fallback copy of the legacy known-host database.
+     *  Retained only for one-time cleanup migration. */
+    const val PREFS_HOSTS_FALLBACK = "usbmanager_hosts_fallback"
 
     /** Holds generic module settings (default mode, auto-off, etc.). */
     const val PREFS_SETTINGS = "usbmanager_settings"

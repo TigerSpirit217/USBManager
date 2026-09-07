@@ -4,7 +4,6 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import com.tiger.usbmanager.policy.HostStore
 
 /**
  * App-side helper that checks whether the module is active in system_server.
@@ -33,7 +32,6 @@ object ModuleActivationCheck {
             val packageName: String,
             val hasUsbDeviceManagerHook: Boolean,
             val hasAdbHook: Boolean,
-            val knownHostCount: Int,
         ) : Status()
         /** Hook class definitely missing in system_server = user hasn't enabled scope. */
         data class Inactive(val reason: String) : Status()
@@ -54,10 +52,6 @@ object ModuleActivationCheck {
                 packageName = ModuleConstants.MODULE_PACKAGE,
                 hasUsbDeviceManagerHook = true,
                 hasAdbHook = true,
-                // The known-host DB lives in the module-app process, so we can report
-                // the real count here without crossing the process boundary (unlike
-                // activation status, which MUST come from system_server).
-                knownHostCount = HostStore.get(context).list().size,
             )
         }
 
@@ -65,17 +59,11 @@ object ModuleActivationCheck {
         val lsposedActive = runCatching { queryLsposedActive(cr) }.getOrDefault(false)
         if (!lsposedActive) {
             Log.w(TAG, "[CHECK] LSPosed service reports module not active")
-            return Status.Inactive(
-                "模块未被 LSPosed 激活。" +
-                    "请在 LSPosed 管理器中：点击本模块 → 打开开关 → 作用域勾选「android（系统框架）」 → 重启手机。",
-            )
+            return Status.Inactive(context.getString(R.string.check_inactive_reason))
         }
 
         Log.i(TAG, "[CHECK] LSPosed says active but system property not set; module may not have loaded in system_server yet")
-        return Status.Unknown(
-            "LSPosed 已启用本模块，但 system_server 尚未加载模块（系统属性未设置）。" +
-                "请重启手机后再次检测。",
-        )
+        return Status.Unknown(context.getString(R.string.check_unknown_note))
     }
 
     /**

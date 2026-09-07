@@ -47,10 +47,6 @@ object UsbConfigSender {
         context: Context,
         mode: UsbMode,
         adb: Boolean,
-        remember: Boolean,
-        auto: Boolean,
-        hostKey: String,
-        hostName: String,
     ) {
         // ---- Path 1: broadcast (best-effort; dropped on many OEM Android 14+ builds) ----
         val intent = Intent(ModuleConstants.ACTION_APPLY_USB_CONFIG).apply {
@@ -60,12 +56,8 @@ object UsbConfigSender {
             putExtra(ModuleConstants.EXTRA_BRIDGE_TOKEN, ModuleConstants.BRIDGE_TOKEN)
             putExtra(ModuleConstants.EXTRA_USB_MODE, mode.wireValue)
             putExtra(ModuleConstants.EXTRA_ADB_ENABLED, adb)
-            putExtra(ModuleConstants.EXTRA_REMEMBER, remember)
-            putExtra(ModuleConstants.EXTRA_AUTO, auto)
-            putExtra(ModuleConstants.EXTRA_HOST_KEY, hostKey)
-            putExtra(ModuleConstants.EXTRA_HOST_NAME, hostName)
         }
-        Log.i(TAG, "[SENDER] path1:sendBroadcast action=${intent.action} mode=$mode adb=$adb remember=$remember host=${hostName.take(24)} keyLen=${hostKey.length}")
+        Log.i(TAG, "[SENDER] path1:sendBroadcast action=${intent.action} mode=$mode adb=$adb")
         runCatching {
             context.sendBroadcast(intent)
         }.onSuccess {
@@ -80,10 +72,6 @@ object UsbConfigSender {
         val payload = PendingApplyPayload(
             modeWire = mode.wireValue,
             adb = adb,
-            remember = remember,
-            auto = auto,
-            hostKey = hostKey,
-            hostName = hostName,
             confirmed = true,
         )
         val written = runCatching { client.putPendingApply(payload) }
@@ -95,26 +83,22 @@ object UsbConfigSender {
     /**
      * Send a "user closed the chooser" notification to system_server without
      * applying any config. Used to distinguish:
-     *   - "confirmed" (user pressed +ve button) → remember last choice
-     *   - "cancelled" (user pressed -ve button) → apply default disconnect rules
-     *   - "dismissed" (user backed away / system killed the activity) → same as cancelled
+     *   - "confirmed" (user pressed +ve button) → apply
+     *   - "cancelled" (user pressed -ve button) → nothing
+     *   - "dismissed" (user backed away / system killed the activity) → nothing
      *
-     * This tells the watcher whether to honour the user's "ADB on" choice on
-     * the next cable-disconnect event (see disconnectAutoOffAdb logic in
-     * UsbStateWatcher.handleDisconnect).
+     * This lets the watcher stop its pending-apply poll when the user did not confirm.
      */
     fun sendChooserClosed(
         context: Context,
         token: Int,
         outcome: String, // "confirmed" | "cancelled" | "dismissed"
-        hostKey: String,
     ) {
         val intent = Intent(ModuleConstants.ACTION_CHOOSER_CLOSED).apply {
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND or FLAG_RECEIVER_INCLUDE_BACKGROUND_FALLBACK)
             putExtra(ModuleConstants.EXTRA_BRIDGE_TOKEN, ModuleConstants.BRIDGE_TOKEN)
             putExtra(ModuleConstants.EXTRA_TOKEN, token)
             putExtra(ModuleConstants.EXTRA_OUTCOME, outcome)
-            putExtra(ModuleConstants.EXTRA_HOST_KEY, hostKey)
         }
         Log.i(TAG, "[SENDER] chooser-closed token=$token outcome=$outcome")
         runCatching {

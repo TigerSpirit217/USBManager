@@ -43,8 +43,9 @@
             android:theme="@style/Theme.USBManager.Dialog" />
 
         <!--
-            Single source of truth for the known-host database. system_server queries
-            it via ContentResolver to resolve policy synchronously when USB connects.
+            ContentProvider in the module app process. system_server queries it via
+            ContentResolver for the module-settings snapshot and the pending-apply
+            mailbox (the identification/memory "known-host" database was removed).
             It is declared `android:exported="true"` (no signature permission) because
             system_server (uid 1000) is signed with the PLATFORM key and can NEVER hold
             a signature-protected module permission; requiring one would make every

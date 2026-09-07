@@ -5,6 +5,7 @@ on:
   push:
     branches: [master]
     paths:
+      - "README_ENG.md"
       - "README.md"
       - "LICENSE"
 

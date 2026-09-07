@@ -8,8 +8,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import com.tiger.usbmanager.ModuleConstants
-import com.tiger.usbmanager.bridge.HostProviderClient
-import com.tiger.usbmanager.policy.HostInfo
 import com.tiger.usbmanager.policy.UsbMode
 
 /**
@@ -25,13 +23,11 @@ import com.tiger.usbmanager.policy.UsbMode
  * Android would NEVER grant a custom `signature-level` permission to uid 1000; the
  * receiver silently rejected every broadcast. Instead we include a compile-time
  * shared token ([ModuleConstants.BRIDGE_TOKEN]) in each broadcast extra and drop
- * anything that doesn't match. The same token now gates mutating [HostProvider]
- * calls for the same reason.
+ * anything that doesn't match.
  */
 internal class SystemServerReceiver(
     private val env: HookEnv,
     private val controller: UsbController,
-    private val hostClient: HostProviderClient,
     private val stateListener: UsbDeviceManagerHook.StateListener?,
     /** Optional reference to the watcher (for chooser-closed signals). */
     private val watcher: UsbStateWatcher?,
@@ -51,10 +47,9 @@ internal class SystemServerReceiver(
             // BRIDGE_TOKEN is a compile-time constant embedded in the APK, so any
             // third-party app that decompiles it could forge our bridge broadcasts.
             // The calling UID, however, cannot be spoofed. Only two senders are
-            // legitimate: the module app process itself (UsbConfigSender, uid == the
-            // module app's uid) and system_server (SYSTEM_UID 1000, which emits the
-            // public ACTION_USB_STATE broadcast). Anything else is rejected before we
-            // even look at the token.
+            // legitimate: the module app process itself (UsbConfigSender) and
+            // system_server (SYSTEM_UID 1000, which emits the public ACTION_USB_STATE
+            // broadcast). Anything else is rejected before we even look at the token.
             val systemUid = android.os.Process.SYSTEM_UID
             val moduleUid = runCatching {
                 context.packageManager.getApplicationInfo(
@@ -111,12 +106,6 @@ internal class SystemServerReceiver(
         }
         env.info("[RX] Registering bridge receiver actions=${bridgeFilter.actionsIterator().asSequence().toList()} ctxPkg=${context.packageName} uid=${android.os.Process.myUid()} (token-gated, no perm)")
         runCatching {
-            // Android 13+ (API 33+) REQUIRES an explicit exported/not-exported flag
-            // on ANY dynamic registerReceiver — without it registerReceiver() throws
-            // SecurityException (seen on NothingOS / Android 16). The bridge receiver
-            // must be EXPORTED because the originating broadcasts come from the module
-            // app (a different uid). Note: exported is safe here because we still
-            // gate every intent on the BRIDGE_TOKEN + calling-uid check in onReceive.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.registerReceiver(receiver, bridgeFilter, Context.RECEIVER_EXPORTED)
             } else {
@@ -127,21 +116,11 @@ internal class SystemServerReceiver(
         }.onFailure { env.error("[RX] Failed to register bridge receiver", it) }
 
         // 2) USB_STATE sticky broadcast fallback.
-        //    UsbDeviceManagerHook SHOULD catch updateState(...) before this broadcast
-        //    is even sent. However, on newer Android releases (Android 16+) where the
-        //    internal UsbDeviceManager method signature changed without warning, this
-        //    broadcast is the public contract that will always exist. Registering it
-        //    gives us a guaranteed second event source as a safety net.
         if (stateListener != null) {
             val usbFilter = IntentFilter(ACTION_USB_STATE).apply {
                 priority = IntentFilter.SYSTEM_HIGH_PRIORITY
             }
             runCatching {
-                // No permission: USB_STATE is a protected sticky broadcast; only the
-                // system sends it, so receiving it never leaks data to unprivileged
-                // callers. We pass null for the permission parameter. Android 13+ still
-                // needs an explicit flag; NOT_EXPORTED is enough (only the system emits
-                // this protected broadcast).
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     context.registerReceiver(receiver, usbFilter, Context.RECEIVER_NOT_EXPORTED)
                 } else {
@@ -159,12 +138,6 @@ internal class SystemServerReceiver(
      * Handles the public Android `android.hardware.usb.action.USB_STATE` sticky
      * broadcast and forwards the connected state to the same watcher that the
      * UsbDeviceManagerHook drives.
-     *
-     * The `UsbManager` extras documented on developer.android.com are:
-     *   - boolean "connected"
-     *   - boolean "configured"
-     *   - String  "function" (comma-separated list on newer Android)
-     *   - int     "usb_data_state" (data transfer enabled/disabled)
      */
     private fun handleUsbStateBroadcast(intent: Intent) {
         val connected = intent.getBooleanExtra(EXTRA_USB_CONNECTED, false)
@@ -183,26 +156,21 @@ internal class SystemServerReceiver(
     private fun handleChooserClosed(intent: Intent) {
         val token = intent.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0)
         val outcome = intent.getStringExtra(ModuleConstants.EXTRA_OUTCOME) ?: "dismissed"
-        val hostKey = intent.getStringExtra(ModuleConstants.EXTRA_HOST_KEY).orEmpty()
-        env.info("[RX] CHOOSER_CLOSED token=$token outcome=$outcome hostKeyLen=${hostKey.length}")
+        env.info("[RX] CHOOSER_CLOSED token=$token outcome=$outcome")
         val w = watcher ?: run {
             env.warn("[RX] CHOOSER_CLOSED but no watcher reference; ignoring")
             return
         }
         runCatching {
-            w.onChooserClosed(token, outcome, hostKey)
+            w.onChooserClosed(token, outcome)
         }.onFailure { env.error("[RX] watcher.onChooserClosed threw", it) }
     }
 
     private fun handleApply(intent: Intent) {
         val mode = UsbMode.fromWire(intent.getStringExtra(ModuleConstants.EXTRA_USB_MODE))
         val adb = intent.getBooleanExtra(ModuleConstants.EXTRA_ADB_ENABLED, false)
-        val remember = intent.getBooleanExtra(ModuleConstants.EXTRA_REMEMBER, false)
-        val auto = intent.getBooleanExtra(ModuleConstants.EXTRA_AUTO, true)
-        val hostKey = intent.getStringExtra(ModuleConstants.EXTRA_HOST_KEY).orEmpty()
-        val hostName = intent.getStringExtra(ModuleConstants.EXTRA_HOST_NAME).orEmpty()
 
-        env.info("[RX] APPLY_USB_CONFIG mode=$mode adb=$adb remember=$remember auto=$auto hostKeyLen=${hostKey.length} hostName=$hostName")
+        env.info("[RX] APPLY_USB_CONFIG mode=$mode adb=$adb")
 
         Handler(Looper.getMainLooper()).post {
             env.info("[RX] posting on main handler; applyConfig running")
@@ -211,59 +179,12 @@ internal class SystemServerReceiver(
                 .getOrDefault(false)
             env.info("[RX] applyConfig effective=$applied (true == both mode+adb applied)")
 
-            if (remember && hostKey.isNotBlank()) {
-                val host = HostInfo(
-                    name = hostName.ifBlank { "PC ${hostKey.take(8)}" },
-                    hostKey = hostKey,
-                    usbMode = mode.wireValue,
-                    adb = adb,
-                    auto = auto,
-                )
-                val saved = runCatching { hostClient.save(host) }
-                    .onFailure { t ->
-                        env.error("[RX] hostClient.save FAILED — trying SharedPreferences fallback", t)
-                        saveHostFallback(env.requireContext(), host)
-                    }.getOrDefault(false)
-                val fallbackOk = if (!saved) {
-                    saveHostFallback(env.requireContext(), host)
-                } else true
-                env.info("[RX] Host saved=$saved name=${host.name} key=${host.hostKey.take(16)}… fallbackOk=$fallbackOk")
-            } else {
-                env.info("[RX] remember=$remember hostKey=${hostKey.isNotBlank()}; skipping save")
-            }
-
-            // Record this APPLY as the confirmed choice (feeds the non-remembered
-            // replay cache on the next connect).
-            runCatching { watcher?.onChooserApplied(mode, adb, hostKey, remember) }
+            runCatching { watcher?.onChooserApplied(mode, adb) }
                 .onFailure { env.error("[RX] watcher.onChooserApplied threw", it) }
         }
     }
 
-    /**
-     * Save a host entry directly to system_server's own SharedPreferences.
-     * Used as fallback when `HostProviderClient` (a ContentProvider in the app
-     * process) is unavailable — system_server doesn't need an app alive to
-     * remember known hosts, so write our own copy; the watcher reads from
-     * both sources on connect.
-     */
-    private fun saveHostFallback(ctx: Context, host: HostInfo): Boolean {
-        val prefs = ctx.getSharedPreferences("usbmanager_hosts_fallback", Context.MODE_PRIVATE)
-        val json = usbBridgeGson.toJson(host)
-        prefs.edit()
-            .putString(fallbackKeyFor(host.hostKey), json)
-            .apply()
-        env.info("[RX] SharedPreferences fallback: wrote host name=${host.name}")
-        return true
-    }
-
-    /** Matches HostProviderClient.fallbackKeyFor so both copies use the same key. */
-    private fun fallbackKeyFor(hostKey: String): String =
-        hostKey.take(32) + "_" + (hostKey.hashCode().toLong() and 0xffffffffL)
-
     private companion object {
-        /** Shared Gson (single instance) for the fallback host serialization. */
-        val usbBridgeGson: com.google.gson.Gson by lazy { com.tiger.usbmanager.bridge.UsbBridgeContract.GSON }
-
         // ---- Android public USB broadcast (sticky) ----
         /** @see android.hardware.usb.UsbManager.ACTION_USB_STATE */
         const val ACTION_USB_STATE = "android.hardware.usb.action.USB_STATE"

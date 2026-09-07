@@ -12,21 +12,27 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import com.tiger.usbmanager.ModuleConstants
+import com.tiger.usbmanager.R
 import com.tiger.usbmanager.bridge.HostProviderClient
 import com.tiger.usbmanager.bridge.ModuleSettingsSnapshot
 import com.tiger.usbmanager.bridge.PendingApplyPayload
-import com.tiger.usbmanager.policy.HostInfo
-import com.tiger.usbmanager.policy.UsbPolicyEngine
 import com.tiger.usbmanager.policy.UsbMode
 
 /**
  * Higher-level USB event handler. Consumes connect/disconnect events from
  * [UsbDeviceManagerHook] and runs the policy:
  *
- *  - CONNECT: fingerprint the host, resolve policy. Auto-apply known hosts;
- *    launch [com.tiger.usbmanager.ui.UsbChooserActivity] for unknown / non-auto hosts.
+ *  - CONNECT: every physical USB connection (device/peripheral mode, i.e. the phone
+ *    plugged into a computer) launches [com.tiger.usbmanager.ui.UsbChooserActivity].
+ *    The identification + "remember this computer" feature has been removed, so there
+ *    is no auto-apply and no host fingerprinting.
  *  - DISCONNECT: turn ADB off (framework setting + stop adbd) so the daemon is
  *    guaranteed down after the cable is unplugged.
+ *
+ * OTG (the phone acting as USB **host**) never reaches this code path: it is handled
+ * by UsbHostManager, not UsbDeviceManager, and never produces a gadget CONNECTED
+ * state. So no chooser is shown for OTG peripherals, which the system already
+ * recognizes natively and needs no ADB.
  *
  * Events are debounced on a main-thread handler so rapid state machine churn
  * (CONNECTED → CONFIGURED → …) doesn't fire the flow twice.
@@ -52,7 +58,6 @@ import com.tiger.usbmanager.policy.UsbMode
  */
 internal class UsbStateWatcher(
     private val env: HookEnv,
-    private val policyEngine: UsbPolicyEngine,
     private val controller: UsbController,
     private val hostClient: HostProviderClient,
 ) : UsbDeviceManagerHook.StateListener {
@@ -64,6 +69,9 @@ internal class UsbStateWatcher(
      *  cancel it (and its lingering full-screen intent) when the cable is unplugged. */
     @Volatile private var lastChooserNotificationToken: Int = 0
     @Volatile private var notificationChannelCreated = false
+    /** Lazily-resolved module package Context, used to localize the notification text
+     *  from the module APK resources while running inside system_server. */
+    @Volatile private var moduleContext: Context? = null
     /** Token of the currently-pending debounced handleConnect runnable, used to
      *  cancel it when a DISCONNECT event arrives before the debounce window
      *  elapses — this is the root cause of "sometimes unplugging a cable still
@@ -86,50 +94,27 @@ internal class UsbStateWatcher(
     // both broadcast path + poll path deliver the same choice.
     @Volatile private var lastAppliedAtMs: Long = 0L
 
-    // ---- Most recent user choice timestamp (used to seed the replay cache). ----
-    // lastConfirmedAtMs = when the user last tapped "confirm" (or the
-    // APPLY_USB_CONFIG broadcast was processed). Feeds non-remembered replay entries.
-    @Volatile private var lastConfirmedAtMs: Long = 0L
-
     // ---- Lock-deferral of the chooser (setting chooserWhileLocked=false) ----
     // When the USB mode chooser can't be shown while locked, we remember the pending
-    // decision and re-launch it once the user unlocks. A single pending slot is enough:
-    // at most one host can be dialgged at a time, and it's cleared on disconnect / cancel
-    // / new connect.
+    // request and re-launch it once the user unlocks. A single pending slot is enough:
+    // at most one request can be dialogged at a time, and it's cleared on disconnect
+    // / cancel / new connect.
     //
     // We deliberately DO NOT hook ACTION_USER_PRESENT: on modern Android that protected
     // broadcast is frequently not delivered to dynamically-registered system_server
     // receivers (observed on NothingOS / Android 16), so unlock would never fire. Instead
     // we poll the keyguard state on the main handler (~500 ms) until unlocked, then launch.
-    @Volatile private var deferredAsk: UsbPolicyEngine.Decision.Ask? = null
+    @Volatile private var deferredRequest: ChooserRequest? = null
     @Volatile private var deferredPollGeneration: Int = 0
     private var deferredPollRunnable: Runnable? = null
 
-    // ---- Short-lived user choice replay cache ----
-    // When the user taps "confirm" in the chooser but does NOT tick "remember
-    // this computer", applying the configuration often causes the USB gadget
-    // to re-enumerate (e.g. switching from CHARGING → MTP, or enabling ADB
-    // changes the config string and forces a bus reset). Re-enumeration looks
-    // like DISCONNECT → CONNECT to us. Without this cache we'd simply show
-    // the chooser again. The replay window covers one USB session (~15s),
-    // during which we silently re-apply the same choice rather than pestering
-    // the user twice. Saved hosts (remember=true) are still handled by the
-    // HostProviderClient database, which survives reboots.
-    private data class ReplayChoice(
-        val mode: UsbMode,
-        val adb: Boolean,
-        /** True only if the user explicitly ticked both "remember" + "auto".
-         *  For non-remembered re-enumerations we still want replay, but we
-         *  never want to silently save a host the user said not to. */
-        val savedAtMs: Long,
-    )
-    /** hostKey -> most recent non-remembered user choice. */
-    private val recentUserChoices = mutableMapOf<String, ReplayChoice>()
+    /** A pending chooser launch: the preselected mode + ADB state to seed into the UI. */
+    private data class ChooserRequest(val mode: UsbMode, val adb: Boolean)
 
     private companion object {
         /**
          * Debounce window (ms) for handleConnect. An onUsbState(true) has to
-         *  "survive" this long before we actually resolve policy. If a
+         *  "survive" this long before we actually launch the chooser. If a
          *  DISCONNECT event arrives in the meantime, the pending runnable is
          *  torn down and nothing fires. 300 ms is well below user-perceptible
          *  latency but long enough to absorb the USB teardown fake-positive. */
@@ -137,7 +122,7 @@ internal class UsbStateWatcher(
 
         /** Debounce window (ms) for handleDisconnect. A DISCONNECTED edge must
          *  "survive" this long before we turn ADB off. This is the symmetric
-         *  guard to [CONNECT_DEBOUNCE_MS]: applying a saved host's mode/ADB
+         *  guard to [CONNECT_DEBOUNCE_MS]: applying the chosen mode/ADB
          *  re-enumerates the USB gadget, which the kernel reports as a brief
          *  DISCONNECTED → CONNECTED pair. Without the debounce, the transient
          *  DISCONNECTED runs handleDisconnect and kills ADB, then CONNECTED
@@ -146,15 +131,7 @@ internal class UsbStateWatcher(
          *  imperceptibly later). */
         private const val DISCONNECT_DEBOUNCE_MS = 800L
 
-        /** Lifetime of one non-remembered choice in the replay cache. */
-        private const val REPLAY_WINDOW_MS = 15_000L
-
-        /** Cap on the number of short-lived replay-cache entries, so a burst of
-         *  distinct host connections can't grow the in-memory map without limit. */
-        private const val MAX_REPLAY_ENTRIES = 4
-
         private const val CHANNEL_ID = "usb_chooser"
-        private const val CHANNEL_NAME = "USB 选择器"
         private const val NOTIF_TAG = "com.tiger.usbmanager.chooser"
 
         /** Poll interval for the ContentProvider pending-apply mailbox (ms). */
@@ -176,12 +153,10 @@ internal class UsbStateWatcher(
      * arrives (i.e. the chooser activity is closed via any path). [outcome] is
      * one of "confirmed" | "cancelled" | "dismissed".
      */
-    fun onChooserClosed(token: Int, outcome: String, hostKey: String) {
-        env.info("[WATCHER] onChooserClosed token=$token outcome=$outcome hostKeyLen=${hostKey.length}")
+    fun onChooserClosed(token: Int, outcome: String) {
+        env.info("[WATCHER] onChooserClosed token=$token outcome=$outcome")
         handler.post {
-            if (outcome == "confirmed") {
-                lastConfirmedAtMs = System.currentTimeMillis()
-            } else {
+            if (outcome != "confirmed") {
                 // User cancelled / dismissed the chooser — no point polling
                 // any further; there's nothing to apply.
                 pendingPollGeneration += 1
@@ -191,42 +166,15 @@ internal class UsbStateWatcher(
     }
 
     /**
-     * Called by SystemServerReceiver after applying the USB config chosen via
-     * APPLY_USB_CONFIG (may arrive without a preceding CHOOSER_CLOSED=confirmed
-     * on some OEM dispatch timings).
-     *
-     * @param remember whether the user ticked "remember this computer". Only
-     *   NON-remembered choices go into the short-lived replay cache: remembered
-     *   hosts are persisted and re-applied via the host database on the next
-     *   connect, so caching them would leave a stale ADB=on entry behind if the
-     *   user later deletes the host and quickly reconnects (see BUG-2 in README).
+     * Called by SystemServerReceiver / the poll path after applying the USB config
+     * chosen via APPLY_USB_CONFIG (may arrive without a preceding CHOOSER_CLOSED=confirmed
+     * on some OEM dispatch timings). Records the apply timestamp so the poll path can
+     * dedup a broadcast-vs-poll double delivery.
      */
-    fun onChooserApplied(mode: UsbMode, adb: Boolean, hostKey: String, remember: Boolean) {
-        env.info("[WATCHER] onChooserApplied mode=$mode adb=$adb remember=$remember hostKeyLen=${hostKey.length}")
+    fun onChooserApplied(mode: UsbMode, adb: Boolean) {
+        env.info("[WATCHER] onChooserApplied mode=$mode adb=$adb")
         handler.post {
-            lastConfirmedAtMs = System.currentTimeMillis()
-            // Also mark the dedup timestamp so the poll path doesn't re-apply
-            // the same user choice when both broadcast + poll deliver it.
-            lastAppliedAtMs = lastConfirmedAtMs
-            // Record a short-lived replay entry ONLY for non-remembered hosts. This
-            // prevents the "tapped 'confirm' without 'remember' → gadget re-enumerates
-            // → chooser pops up AGAIN" nuisance. Remembered hosts flow through the
-            // host database instead, and are deliberately excluded so deleting a saved
-            // host doesn't leave a stale replay behind.
-            if (hostKey.isNotBlank() && !remember) {
-                recentUserChoices[hostKey] = ReplayChoice(
-                    mode = mode,
-                    adb = adb,
-                    savedAtMs = lastConfirmedAtMs,
-                )
-                // Evict the oldest entry if the cache grows past its cap.
-                while (recentUserChoices.size > MAX_REPLAY_ENTRIES) {
-                    val oldest = recentUserChoices.entries.minByOrNull { it.value.savedAtMs }
-                    if (oldest == null) break
-                    recentUserChoices.remove(oldest.key)
-                }
-                env.info("[WATCHER] recorded ${REPLAY_WINDOW_MS / 1000}s replay cache for hostKeyLen=${hostKey.length} (cache=${recentUserChoices.size}/$MAX_REPLAY_ENTRIES)")
-            }
+            lastAppliedAtMs = System.currentTimeMillis()
         }
     }
 
@@ -283,61 +231,25 @@ internal class UsbStateWatcher(
 
     private fun handleConnect() {
         env.info("[WATCHER] handleConnect ENTER")
-        // If the module app deleted a host, drop any stale grace/replay state so we
-        // don't keep ADB on (or suppress the chooser) for a host the user just removed.
-        consumeAndResolveHostDeleted()
         val ctx = env.systemContext ?: run {
             env.warn("[WATCHER] systemContext not ready; skipping connect handling")
             return
         }
-        val now = System.currentTimeMillis()
         env.info("[WATCHER] systemContext available: uid=${android.os.Process.myUid()}")
 
-        val hostKey = UsbHostIdentifier.currentHostKey().orEmpty()
-        val hostName = UsbHostIdentifier.defaultHostName(hostKey.takeIf { it.isNotBlank() })
-        env.info("[WATCHER] USB CONNECT hostKey=${hostKey.take(16)}…(len=${hostKey.length}) name=$hostName")
-
-        // ---- 1) Replay cache hit (see header on ReplayChoice). ----
-        if (hostKey.isNotBlank()) {
-            val cached = recentUserChoices[hostKey]
-            if (cached != null && (now - cached.savedAtMs) in 0..REPLAY_WINDOW_MS) {
-                env.info("[WATCHER] REPLAY-CACHE HIT age=${now - cached.savedAtMs}ms mode=${cached.mode} adb=${cached.adb} (re-enumeration guard)")
-                runCatching { controller.applyConfig(cached.mode, cached.adb) }
-                    .onFailure { env.error("[WATCHER] replay applyConfig threw", it) }
-                    .getOrDefault(false)
-                    .also { env.info("[WATCHER] replay applyConfig effective=$it") }
-                return
-            } else if (cached != null) {
-                env.info("[WATCHER] REPLAY-CACHE stale age=${now - cached.savedAtMs}ms; evicting")
-                recentUserChoices.remove(hostKey)
-            }
-        }
-
-        // ---- 2) Normal policy resolution. ----
-        val decision = runCatching { policyEngine.resolve(hostKey, hostName) }
-            .onFailure { env.error("[WATCHER] policyEngine.resolve FAILED", it) }
-            .getOrElse { UsbPolicyEngine.Decision.Ask(hostKey, hostName, UsbMode.CHARGING, false) }
-        env.info("[WATCHER] policy decision = $decision")
+        // Every device-mode connection prompts. Preselect the chooser from the
+        // user's default-mode / default-ADB settings (no host memory).
         val settings: ModuleSettingsSnapshot = runCatching { hostClient.settings() }
             .onFailure { env.warn("[WATCHER] settings lookup failed; using defaults", it) }
             .getOrDefault(ModuleSettingsSnapshot(UsbMode.CHARGING, false, true))
-        when (decision) {
-            is UsbPolicyEngine.Decision.Apply -> {
-                env.info("[WATCHER] → AUTO-APPLY mode=${decision.mode} adb=${decision.adb}")
-                val applied = runCatching { controller.applyConfig(decision.mode, decision.adb) }
-                    .onFailure { env.error("[WATCHER] auto-apply applyConfig threw", it) }
-                    .getOrDefault(false)
-                env.info("[WATCHER] auto-apply applyConfig effective=$applied (true == both mode+adb applied)")
-            }
-            is UsbPolicyEngine.Decision.Ask -> {
-                env.info("[WATCHER] → ASK user preselect=${decision.preselectMode} adb=${decision.preselectAdb} host=$hostName")
-                if (shouldDeferChooserForLock(ctx, settings)) {
-                    env.info("[WATCHER] device locked & chooserWhileLocked=false → defer chooser until unlock")
-                    deferChooserUntilUnlock(ctx, decision)
-                } else {
-                    launchChooser(ctx, decision)
-                }
-            }
+        env.info("[WATCHER] → ASK user preselect=${settings.defaultMode} adb=${settings.defaultAdb}")
+
+        val request = ChooserRequest(mode = settings.defaultMode, adb = settings.defaultAdb)
+        if (shouldDeferChooserForLock(ctx, settings)) {
+            env.info("[WATCHER] device locked & chooserWhileLocked=false → defer chooser until unlock")
+            deferChooserUntilUnlock(ctx, request)
+        } else {
+            launchChooser(ctx, request)
         }
     }
 
@@ -364,13 +276,13 @@ internal class UsbStateWatcher(
     }
 
     /**
-     * Defers [decision] until the user unlocks, by polling the keyguard state on the
+     * Defers [request] until the user unlocks, by polling the keyguard state on the
      * main handler. Unlock is detected via [isScreenLocked] flipping to false, then we
-     * launch the previously-stored chooser. Any previously deferred choice is dropped.
+     * launch the previously-stored chooser. Any previously deferred request is dropped.
      */
-    private fun deferChooserUntilUnlock(ctx: Context, decision: UsbPolicyEngine.Decision.Ask) {
+    private fun deferChooserUntilUnlock(ctx: Context, request: ChooserRequest) {
         cancelDeferredChooser()
-        deferredAsk = decision
+        deferredRequest = request
         val generation = ++deferredPollGeneration
         env.info("[WATCHER] defer chooser (gen=$generation): polling keyguard every ${LOCK_UNLOCK_POLL_MS}ms up to ${LOCK_UNLOCK_MAX_ATTEMPTS} attempts")
         val runnable = object : Runnable {
@@ -384,11 +296,11 @@ internal class UsbStateWatcher(
                     return
                 }
                 if (!isScreenLocked(ctx)) {
-                    val ask = deferredAsk
+                    val req = deferredRequest
                     cancelDeferredChooser()
-                    if (ask == null) return
-                    env.info("[WATCHER] keyguard unlocked after ${attempts} polls; launching deferred chooser host=${ask.hostName}")
-                    runCatching { launchChooser(ctx, ask) }
+                    if (req == null) return
+                    env.info("[WATCHER] keyguard unlocked after ${attempts} polls; launching deferred chooser")
+                    runCatching { launchChooser(ctx, req) }
                         .onFailure { env.error("[WATCHER] deferred launchChooser threw", it) }
                 } else {
                     handler.postDelayed(this, LOCK_UNLOCK_POLL_MS)
@@ -402,7 +314,7 @@ internal class UsbStateWatcher(
     /** Drops any deferred chooser (disconnect/new connect) and stops the lock poll. */
     private fun cancelDeferredChooser() {
         deferredPollGeneration += 1
-        deferredAsk = null
+        deferredRequest = null
         val runnable = deferredPollRunnable ?: return
         deferredPollRunnable = null
         handler.removeCallbacks(runnable)
@@ -422,8 +334,6 @@ internal class UsbStateWatcher(
         // Drop any lock-deferred chooser: the cable is gone, no point re-launching
         // on a later unlock.
         cancelDeferredChooser()
-        // A deleted host must not be re-applied via the stale replay cache.
-        consumeAndResolveHostDeleted()
         env.info("[WATCHER] handleDisconnect ENTER; cancelled pending-apply poll loop generation=$pendingPollGeneration")
         val settings: ModuleSettingsSnapshot = runCatching { hostClient.settings() }
             .onFailure { env.warn("[WATCHER] hostClient.settings lookup failed; using defaults", it) }
@@ -438,7 +348,7 @@ internal class UsbStateWatcher(
         // edge-cancel machinery, so an unconditional auto-off never kills ADB that
         // legitimately reconnects within the same plug.
         val turnAdbOff: Boolean = settings.disconnectAutoOffAdb
-        env.info("[WATCHER] decision: turnAdbOff=$turnAdbOff (defaultAutoOff=${settings.disconnectAutoOffAdb})")
+        env.info("[WATCHER] decision: turnAdbOff=$turnAdbOff")
         if (turnAdbOff) {
             env.info("[WATCHER] → Turning ADB OFF (framework + adbd)")
             val ok = runCatching { controller.setAdbEnabled(false) }
@@ -462,21 +372,6 @@ internal class UsbStateWatcher(
         }.onFailure { env.warn("[WATCHER] failed to cancel chooser notification", it) }
     }
 
-    /**
-     * Polls the provider's deleted-host flag. If any host was removed via the module app
-     * since our last consume, clear the non-remembered replay cache so the removed host
-     * isn't silently re-applied on the next connect.
-     */
-    private fun consumeAndResolveHostDeleted() {
-        val deleted = runCatching { hostClient.consumeHostDeleted() }
-            .onFailure { env.warn("[WATCHER] consumeHostDeleted threw", it) }
-            .getOrDefault(false)
-        if (!deleted) return
-        recentUserChoices.clear()
-        lastConfirmedAtMs = 0L
-        env.info("[WATCHER] a host was deleted; cleared replay cache")
-    }
-
     private fun dismissChooserActivity() {
         val token = pendingChooserToken
         if (token == 0) return
@@ -492,11 +387,11 @@ internal class UsbStateWatcher(
         }.onFailure { env.warn("[WATCHER] failed to send DISMISS_CHOOSER", it) }
     }
 
-    private fun launchChooser(ctx: Context, decision: UsbPolicyEngine.Decision.Ask) {
+    private fun launchChooser(ctx: Context, request: ChooserRequest) {
         pendingChooserToken += 1
         val token = pendingChooserToken
         lastChooserNotificationToken = token
-        env.info("[WATCHER] launchChooser token=$token hostName=${decision.hostName}")
+        env.info("[WATCHER] launchChooser token=$token preselect=${request.mode} adb=${request.adb}")
 
         val intent = Intent().apply {
             component = ComponentName(ModuleConstants.MODULE_PACKAGE, ModuleConstants.CHOOSER_ACTIVITY)
@@ -506,21 +401,15 @@ internal class UsbStateWatcher(
                 Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT or
                 Intent.FLAG_RECEIVER_FOREGROUND
             putExtra(ModuleConstants.EXTRA_TOKEN, token)
-            putExtra(ModuleConstants.EXTRA_HOST_KEY, decision.hostKey)
-            putExtra(ModuleConstants.EXTRA_HOST_NAME, decision.hostName ?: "")
-            putExtra(ModuleConstants.EXTRA_USB_MODE, decision.preselectMode.wireValue)
-            putExtra(ModuleConstants.EXTRA_ADB_ENABLED, decision.preselectAdb)
+            putExtra(ModuleConstants.EXTRA_USB_MODE, request.mode.wireValue)
+            putExtra(ModuleConstants.EXTRA_ADB_ENABLED, request.adb)
         }
         env.info("[WATCHER] chooser intent component=${intent.component}")
 
         // ---- Path 1: direct startActivity (best-effort, works on older Android).
         //   On Android 14+ a startActivity from a system_server context may still be
         //   blocked despite the package-manager exemption; in that case this throws
-        //   and we fall through to Path 2 (full-screen notification). We deliberately
-        //   use plain `ctx.startActivity` here: the previous attempt to reflect
-        //   `ActivityManager.getService().startActivityAsUser` never actually invoked
-        //   the reflected method (both branches just called ctx.startActivity), so it
-        //   was dead code that added no behaviour.
+        //   and we fall through to Path 2 (full-screen notification).
         val directOk = runCatching { ctx.startActivity(intent) }.onSuccess {
             env.info("[WATCHER] Chooser launched (startActivity direct) token=$token")
         }.onFailure {
@@ -539,8 +428,8 @@ internal class UsbStateWatcher(
                     intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )
-                val title = "USB 连接：${decision.hostName?.ifBlank { null } ?: "未识别电脑"}"
-                val text = "点击选择 USB 模式与 ADB 开关。"
+                val title = moduleString(ctx, R.string.chooser_notification_title, "USB connected")
+                val text = moduleString(ctx, R.string.chooser_notification_text, "Tap to choose USB mode and ADB.")
                 val notif: Notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     Notification.Builder(ctx, CHANNEL_ID)
                         .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -597,10 +486,10 @@ internal class UsbStateWatcher(
             }
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                CHANNEL_NAME,
+                moduleString(ctx, R.string.notification_channel_name, "USB chooser"),
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = "USB 插入时弹出选择界面"
+                description = moduleString(ctx, R.string.notification_channel_desc, "Shows a chooser when USB is plugged in")
                 enableLights(false)
                 enableVibration(false)
                 setShowBadge(true)
@@ -611,6 +500,20 @@ internal class UsbStateWatcher(
         }.onFailure {
             env.warn("[WATCHER] Could not create notification channel", it)
         }
+    }
+
+    /**
+     * Resolves a module-APK string resource while running inside system_server. The
+     * system_server Context's resources map to the framework, not our APK, so we must
+     * open a package-scoped Context for the module to read its own strings. Falls back
+     * to [fallback] (English) when the module Context can't be created.
+     */
+    private fun moduleString(ctx: Context, resId: Int, fallback: String): String {
+        val mc = moduleContext ?: runCatching {
+            ctx.createPackageContext(ModuleConstants.MODULE_PACKAGE, 0).also { moduleContext = it }
+        }.getOrNull()
+        if (mc == null) return fallback
+        return runCatching { mc.getString(resId) }.getOrElse { fallback }
     }
 
     // ---- Pending-apply mailbox polling (UsbConfigSender path 2 fallback) ----
@@ -634,10 +537,10 @@ internal class UsbStateWatcher(
             .onFailure { env.warn("[WATCHER] pollForPendingApply hostClient.getAndClearPendingApply threw", it) }
             .getOrNull()
         if (payload != null && payload.confirmed) {
-            env.info("[WATCHER] pollForPendingApply HIT token=$token gen=$generation attemptsLeft=$attemptsLeft mode=${payload.modeWire} adb=${payload.adb} remember=${payload.remember}")
+            env.info("[WATCHER] pollForPendingApply HIT token=$token gen=$generation attemptsLeft=$attemptsLeft mode=${payload.modeWire} adb=${payload.adb}")
             // Dedup: if the broadcast path also delivered APPLY_USB_CONFIG within
             // the last 5 s, don't apply twice (both toggle actions are idempotent,
-            // but the log spam and host-save double-write is undesirable).
+            // but the log spam is undesirable).
             val now = System.currentTimeMillis()
             if (now - lastAppliedAtMs < APPLY_DEDUP_WINDOW_MS) {
                 env.info("[WATCHER] pollForPendingApply dedup skip: broadcast path already applied ${now - lastAppliedAtMs}ms ago")
@@ -670,11 +573,7 @@ internal class UsbStateWatcher(
     private fun applyPendingPayload(payload: PendingApplyPayload) {
         val mode = UsbMode.fromWire(payload.modeWire)
         val adb = payload.adb
-        val remember = payload.remember
-        val auto = payload.auto
-        val hostKey = payload.hostKey
-        val hostName = payload.hostName
-        env.info("[WATCHER] applyPendingPayload (via poll) mode=$mode adb=$adb remember=$remember auto=$auto hostKeyLen=${hostKey.length} hostName=$hostName")
+        env.info("[WATCHER] applyPendingPayload (via poll) mode=$mode adb=$adb")
 
         Handler(Looper.getMainLooper()).post {
             val applied = runCatching { controller.applyConfig(mode, adb) }
@@ -682,27 +581,8 @@ internal class UsbStateWatcher(
                 .getOrDefault(false)
             env.info("[WATCHER] applyPendingPayload: controller.applyConfig effective=$applied (true == both mode+adb applied)")
 
-            if (remember && hostKey.isNotBlank()) {
-                val host = HostInfo(
-                    name = hostName.ifBlank { "PC ${hostKey.take(8)}" },
-                    hostKey = hostKey,
-                    usbMode = mode.wireValue,
-                    adb = adb,
-                    auto = auto,
-                )
-                runCatching { hostClient.save(host) }
-                    .onFailure { t ->
-                        env.warn("[WATCHER] applyPendingPayload: hostClient.save FAILED", t)
-                        // HostProviderClient.save internally writes SP fallback too
-                    }
-                env.info("[WATCHER] applyPendingPayload: host remember requested name=${host.name}")
-            }
-
-            // Update the confirmed-interaction state so the next handleDisconnect
-            // respects the grace window.
-            runCatching { onChooserApplied(mode, adb, hostKey, remember) }
+            runCatching { onChooserApplied(mode, adb) }
                 .onFailure { env.error("[WATCHER] applyPendingPayload: onChooserApplied threw", it) }
         }
     }
-
 }

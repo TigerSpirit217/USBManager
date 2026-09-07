@@ -1,0 +1,69 @@
+<resources>
+    <string name="app_name">USB Manager</string>
+    <string name="xposed_description">A libxposed API 102 USB module that hooks system_server to show a chooser for USB mode and ADB on every computer connection.</string>
+
+    <!-- MainActivity intro -->
+    <string name="intro_module_info">Version: %1$s</string>
+    <string name="intro_start">Get Started</string>
+    <string name="intro_section_features">Features</string>
+    <string name="intro_feature_1">• Detects USB connections automatically (hooks UsbDeviceManager + broadcast fallback)</string>
+    <string name="intro_feature_2">• Shows the USB chooser on every computer connection (falls back to a full-screen notification intent when background-start is restricted)</string>
+    <string name="intro_feature_3">• Available modes: Charge only / File transfer (MTP) / Photo transfer (PTP) / USB tethering (RNDIS) / MIDI</string>
+    <string name="intro_feature_4">• Enables USB debugging (ADB) with a single tap</string>
+    <string name="intro_feature_5">• No chooser for OTG devices (phone acting as a USB host); handled natively by the system</string>
+    <string name="intro_feature_6">• Turns ADB off after unplug (can be disabled), ensuring adbd stops</string>
+    <string name="intro_feature_7">• Logs go to LSPosed: LSPosed Manager → Modules → USBManager → ⋮ menu → View logs</string>
+    <string name="intro_section_usage">Usage</string>
+    <string name="intro_usage_1">1. Enable this module in LSPosed and tick \"system\" in scope (the system_server scope for API 102)</string>
+    <string name="intro_usage_2">2. Tap the top \"module active\" banner to verify the hooks; otherwise reboot or run: adb shell killall system_server</string>
+    <string name="intro_usage_3">3. Connect to a computer via USB; the chooser appears every time (via a full-screen high-priority notification when locked/in the background)</string>
+    <string name="intro_usage_4">4. Choose the USB mode and ADB toggle, then tap \"OK\" to apply</string>
+    <string name="intro_usage_5">5. Tap \"Re-check\" on the top status card to re-check module activation</string>
+    <string name="intro_usage_6">6. Tap \"How to get logs\" to learn how to export the full hook log from LSPosed</string>
+
+    <!-- MainActivity config manager / activation -->
+    <string name="settings_view_intro">Guide</string>
+    <string name="settings_module_settings">Module settings</string>
+    <string name="settings_default_mode">Default USB mode</string>
+    <string name="settings_default_adb">Default: enable USB debugging</string>
+    <string name="settings_disconnect_auto_off">Turn ADB off on unplug</string>
+    <string name="settings_chooser_while_locked">Show chooser while locked</string>
+    <string name="activate_checking">Checking module activation…</string>
+    <string name="activate_check_error">Check failed: %1$s</string>
+    <string name="activate_state_active">✅ Module active (hooks OK)</string>
+    <string name="activate_state_inactive">❌ Module inactive (LSPosed did not inject system_server)</string>
+    <string name="activate_state_unknown">⚠️ Module status unknown</string>
+    <string name="activate_hook_ok">✔</string>
+    <string name="activate_hook_fail">✘</string>
+    <string name="activate_body">USB hook: %1$s   ADB hook: %2$s\nModule package: %3$s</string>
+    <string name="action_recheck">Re-check</string>
+    <string name="action_activation_guide">Activation guide</string>
+    <string name="activation_guide_title">How to activate this module in LSPosed</string>
+    <string name="activation_guide_message">1. Open LSPosed Manager (or its entry in Magisk)\n\n2. Go to the Modules page, find \"USB Manager\", and open its details\n\n3. Turn on the enable switch in the top-right corner\n\n4. Under Scope, tick \"system\" (the system_server-specific scope)\n\n5. Go back and choose Reboot, or run:\n   adb shell killall system_server\n\nAfter rebooting, return here and tap \"Re-check\" — \"Module active\" means success.\n\nIf it still doesn\'t work, check the module log in LSPosed Manager.</string>
+    <string name="action_get_logs">How to get logs</string>
+    <string name="logs_how_to_title">Getting USBManager hook logs</string>
+    <string name="logs_how_to_message">1. Open LSPosed Manager (or the LSPosed module manager)\n2. Go to the Modules tab\n3. Find USBManager and open its details\n4. Tap the ⋮ (more) menu in the top-right corner\n5. Tap \"View logs\" to see the full hook log, including:\n     • Whether the module was injected into system_server\n     • Each USB plug/unplug event\n     • Whether APPLY_USB_CONFIG was received after your choice\n     • Whether the mode switch and ADB toggle succeeded\n\n[Alternative: command line]\n  adb logcat -c &amp;&amp; adb logcat -s USBManager:V LSPosedFramework:V\n\n(Writing to Android/data/.../logs/ fails on NothingOS/Android 16\nbecause system_server can\'t write to another app\'s private storage,\nso we use LSPosed\'s built-in log viewer.)</string>
+    <string name="dialog_got_it">Got it</string>
+    <string name="dialog_cancel">Cancel</string>
+
+    <!-- UsbChooserActivity -->
+    <string name="chooser_title">USB connection</string>
+    <string name="chooser_mode_charging">Charge only</string>
+    <string name="chooser_mode_mtp">File transfer (MTP)</string>
+    <string name="chooser_mode_ptp">Photo transfer (PTP)</string>
+    <string name="chooser_mode_rndis">USB tethering (RNDIS)</string>
+    <string name="chooser_mode_midi">MIDI</string>
+    <string name="chooser_adb">Enable USB debugging</string>
+    <string name="chooser_cancel">Cancel</string>
+    <string name="chooser_confirm">OK</string>
+
+    <!-- ModuleActivationCheck -->
+    <string name="check_inactive_reason">The module is not activated in LSPosed. In LSPosed Manager: tap this module → enable it → tick \"android (system framework)\" in scope → reboot.</string>
+    <string name="check_unknown_note">LSPosed has enabled this module, but system_server hasn\'t loaded it yet (system property unset). Reboot and re-check.</string>
+
+    <!-- Notification (used inside system_server) -->
+    <string name="notification_channel_name">USB chooser</string>
+    <string name="notification_channel_desc">Shows a chooser when USB is plugged in</string>
+    <string name="chooser_notification_title">USB connected</string>
+    <string name="chooser_notification_text">Tap to choose USB mode and ADB.</string>
+</resources>

@@ -5,8 +5,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.tiger.usbmanager.ModuleConstants
 import com.tiger.usbmanager.bridge.HostProviderClient
-import com.tiger.usbmanager.policy.UsbPolicyEngine
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import io.github.libxposed.api.XposedInterface
@@ -148,18 +148,29 @@ internal object SystemServerHooks {
     ) {
         val ctx = env.requireContext()
         env.info("[HOOK] onContextReady start; contentResolver ok=${ctx.contentResolver != null}")
+        // Migration: the identification/memory feature was removed; clear any legacy
+        // host database written by older versions into system_server's own prefs.
+        clearLegacyHostFallback(env, ctx)
         val hostClient = HostProviderClient(ctx)
-        val policyEngine = UsbPolicyEngine(hostClient)
-        env.info("[HOOK] policyEngine + hostClient constructed; knownHostCount=${runCatching { hostClient.list().size }.getOrNull()}")
-        val watcher = UsbStateWatcher(env, policyEngine, controller, hostClient)
+        val watcher = UsbStateWatcher(env, controller, hostClient)
         env.info("[HOOK] UsbStateWatcher built; wiring to listenerHolder (will replay pending events if any)")
         listenerHolder.delegate = watcher
         env.info("[HOOK] UsbStateWatcher wired as delegate")
 
-        val receiver = SystemServerReceiver(env, controller, hostClient, watcher /* stateListener */, watcher /* watcher for chooser callbacks */)
+        val receiver = SystemServerReceiver(env, controller, watcher /* stateListener */, watcher /* watcher for chooser callbacks */)
         runCatching { receiver.register(ctx) }
             .onFailure { env.error("[HOOK] SystemServerReceiver.register failed", it) }
         env.info("[HOOK] system_server USB module fully ready")
+    }
+
+    /** Clear the legacy `usbmanager_hosts_fallback` SharedPreferences written by old
+     *  versions into system_server's data dir. Idempotent; runs once per boot. */
+    private fun clearLegacyHostFallback(env: HookEnv, ctx: Context) {
+        runCatching {
+            ctx.getSharedPreferences(ModuleConstants.PREFS_HOSTS_FALLBACK, Context.MODE_PRIVATE)
+                .edit().clear().apply()
+            env.info("[HOOK] cleared legacy host fallback prefs")
+        }.onFailure { env.warn("[HOOK] failed to clear legacy host fallback prefs", it) }
     }
 
     private fun hookApplicationAttach(env: HookEnv, onAttach: (Context) -> Unit) {
