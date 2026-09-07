@@ -324,7 +324,7 @@ class MainActivity : Activity() {
         setPadding(dp(16), dp(16), dp(16), dp(16))
         layoutParams = margin()
 
-        addView(row(getString(R.string.settings_default_mode), ModuleSettings.defaultMode().uppercase()) {
+        addView(row(getString(R.string.settings_default_mode), UsbMode.fromWire(ModuleSettings.defaultMode()).name) {
             showModePicker()
         })
         addView(toggleRow(getString(R.string.settings_default_adb), ModuleSettings.defaultAdb()) { checked ->

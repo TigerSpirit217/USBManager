@@ -2,6 +2,7 @@ package com.tiger.usbmanager
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.tiger.usbmanager.policy.UsbMode
 
 /**
  * Generic module settings (default mode, default ADB, disconnect auto-off toggle).
@@ -36,7 +37,7 @@ object ModuleSettings {
     }
 
     fun defaultMode(): String =
-        prefs().getString(KEY_DEFAULT_MODE, "charging") ?: "charging"
+        prefs().getString(KEY_DEFAULT_MODE, UsbMode.CHARGING.wireValue) ?: UsbMode.CHARGING.wireValue
 
     fun defaultAdb(): Boolean = prefs().getBoolean(KEY_DEFAULT_ADB, false)
 

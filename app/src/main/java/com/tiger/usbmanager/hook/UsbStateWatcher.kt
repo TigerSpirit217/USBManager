@@ -93,6 +93,9 @@ internal class UsbStateWatcher(
     // Has a pending payload already been applied? Prevents double-apply when
     // both broadcast path + poll path deliver the same choice.
     @Volatile private var lastAppliedAtMs: Long = 0L
+    // Until when a CONNECTED edge is treated as a re-enumeration caused by a config
+    // change (mode/ADB toggle) rather than a fresh plug. See REENUM_SUPPRESS_MS.
+    @Volatile private var suppressConnectUntilMs: Long = 0L
 
     // ---- Lock-deferral of the chooser (setting chooserWhileLocked=false) ----
     // When the USB mode chooser can't be shown while locked, we remember the pending
@@ -141,6 +144,13 @@ internal class UsbStateWatcher(
         /** Dedup window for applying the same pending payload (ms). */
         private const val APPLY_DEDUP_WINDOW_MS = 5_000L
 
+        /** Window (ms) after applying a config (or turning ADB off) during which a
+         *  CONNECTED event is treated as a gadget re-enumeration rather than a new
+         *  plug, so the chooser is NOT re-shown. Changing USB mode / ADB forces a bus
+         *  reset that the kernel reports as DISCONNECTED → CONNECTED; without this the
+         *  user sees the chooser flash again right after confirming. */
+        private const val REENUM_SUPPRESS_MS = 3_000L
+
         /** Interval (ms) at which we re-check whether the keyguard is unlocked while a
          *  chooser is deferred. Must be short enough to feel instant after unlocking. */
         private const val LOCK_UNLOCK_POLL_MS = 500L
@@ -174,7 +184,9 @@ internal class UsbStateWatcher(
     fun onChooserApplied(mode: UsbMode, adb: Boolean) {
         env.info("[WATCHER] onChooserApplied mode=$mode adb=$adb")
         handler.post {
-            lastAppliedAtMs = System.currentTimeMillis()
+            val now = System.currentTimeMillis()
+            lastAppliedAtMs = now
+            suppressConnectUntilMs = now + REENUM_SUPPRESS_MS
         }
     }
 
@@ -231,6 +243,14 @@ internal class UsbStateWatcher(
 
     private fun handleConnect() {
         env.info("[WATCHER] handleConnect ENTER")
+        // A CONNECTED edge that arrives right after we applied a config (or turned
+        // ADB off) is the gadget re-enumerating, not a fresh cable plug — skip the
+        // chooser so the user doesn't see it flash again after confirming.
+        val now = System.currentTimeMillis()
+        if (now < suppressConnectUntilMs) {
+            env.info("[WATCHER] suppressing chooser: re-enumeration window active (${suppressConnectUntilMs - now}ms left)")
+            return
+        }
         val ctx = env.systemContext ?: run {
             env.warn("[WATCHER] systemContext not ready; skipping connect handling")
             return
@@ -355,6 +375,9 @@ internal class UsbStateWatcher(
                 .onFailure { env.error("[WATCHER] setAdbEnabled(false) FAILED", it) }
                 .getOrDefault(false)
             env.info("[WATCHER] setAdbEnabled(false) returned ok=$ok")
+            // Stopping adbd forces a gadget re-enumeration that the kernel may briefly
+            // report as CONNECTED; suppress the chooser so it doesn't flash after unplug.
+            suppressConnectUntilMs = System.currentTimeMillis() + REENUM_SUPPRESS_MS
         } else {
             env.info("[WATCHER] leaving ADB untouched (拔线自动关ADB is OFF)")
         }
@@ -521,6 +544,11 @@ internal class UsbStateWatcher(
     private fun startPendingApplyPoll(token: Int) {
         val generation = ++pendingPollGeneration
         env.info("[WATCHER] startPendingApplyPoll token=$token gen=$generation (max attempts=$POLL_MAX_ATTEMPTS interval=${POLL_INTERVAL_MS}ms)")
+        // Discard any stale pending-apply left over from a previous chooser whose poll
+        // loop already timed out; otherwise a new chooser would immediately "hit" an old
+        // choice and apply it before the user even decides.
+        runCatching { hostClient.getAndClearPendingApply() }
+            .onFailure { env.warn("[WATCHER] discard stale pending-apply failed", it) }
         handler.post { pollForPendingApply(token, generation, POLL_MAX_ATTEMPTS) }
     }
 
