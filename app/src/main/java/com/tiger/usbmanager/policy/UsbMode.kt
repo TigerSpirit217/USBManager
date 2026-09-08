@@ -10,6 +10,7 @@ import com.tiger.usbmanager.ModuleConstants
 enum class UsbMode(val wireValue: String, val displayRes: Int) {
     CHARGING("none", com.tiger.usbmanager.R.string.chooser_mode_charging),
     MTP("mtp", com.tiger.usbmanager.R.string.chooser_mode_mtp),
+    PTP("ptp", com.tiger.usbmanager.R.string.chooser_mode_ptp),
     RNDIS("rndis", com.tiger.usbmanager.R.string.chooser_mode_rndis);
 
     companion object {

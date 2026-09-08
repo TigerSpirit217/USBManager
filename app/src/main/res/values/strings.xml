@@ -34,6 +34,7 @@
     <string name="chooser_mode_section">本次连接方式</string>
     <string name="chooser_mode_charging_description">保持数据通道关闭，更安全</string>
     <string name="chooser_mode_mtp_description">浏览和传输手机中的文件</string>
+    <string name="chooser_mode_ptp_description">以相机设备方式导入照片和视频</string>
     <string name="chooser_mode_rndis_description">通过 USB 向电脑共享网络</string>
     <string name="chooser_adb_description">允许这台电脑发起调试连接</string>
     <string name="chooser_one_time_hint">选择仅对本次连接有效，拔线后自动恢复仅充电</string>
@@ -58,7 +59,7 @@
     <string name="chooser_host_unknown">未识别电脑</string>
     <string name="chooser_mode_charging">仅充电</string>
     <string name="chooser_mode_mtp">文件传输 (MTP)</string>
-    <string name="chooser_mode_ptp">图片传输 (PTP)</string>
+    <string name="chooser_mode_ptp">照片传输 (PTP)</string>
     <string name="chooser_mode_rndis">USB 网络共享 (RNDIS)</string>
     <string name="chooser_mode_midi">MIDI</string>
     <string name="chooser_adb">开启 USB 调试</string>

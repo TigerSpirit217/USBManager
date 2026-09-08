@@ -117,7 +117,7 @@ apply_usb_config() {
     mode=$1
     adb=$2
     case "$mode" in
-        none|mtp|rndis) ;;
+        none|mtp|ptp|rndis) ;;
         *) mode=none ;;
     esac
     [ "$adb" = "1" ] || adb=0

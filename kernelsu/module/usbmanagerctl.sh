@@ -11,7 +11,7 @@ case "$1" in
         [ -f "$SESSION_FILE" ] || { echo no_session; exit 2; }
         expected_token=$(cat "$SESSION_FILE" 2>/dev/null)
         [ "$token" = "$expected_token" ] || { echo bad_token; exit 3; }
-        case "$mode" in none|mtp|rndis) ;; *) echo bad_mode; exit 4 ;; esac
+        case "$mode" in none|mtp|ptp|rndis) ;; *) echo bad_mode; exit 4 ;; esac
         [ "$adb" = "1" ] || adb=0
         apply_usb_config "$mode" "$adb"
         rm -f "$SESSION_FILE"

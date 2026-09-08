@@ -95,6 +95,13 @@
                     android:layout_marginTop="9dp" />
 
                 <include
+                    android:id="@+id/option_ptp"
+                    layout="@layout/view_usb_mode_option"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="9dp" />
+
+                <include
                     android:id="@+id/option_rndis"
                     layout="@layout/view_usb_mode_option"
                     android:layout_width="match_parent"

@@ -31,7 +31,7 @@ import com.tiger.usbmanager.policy.UsbMode
 
 /** One-time USB mode chooser launched by the KernelSU service. */
 class UsbChooserActivity : ComponentActivity() {
-    private val modes = listOf(UsbMode.CHARGING, UsbMode.MTP, UsbMode.RNDIS)
+    private val modes = listOf(UsbMode.CHARGING, UsbMode.MTP, UsbMode.PTP, UsbMode.RNDIS)
     private val optionViews = linkedMapOf<UsbMode, ModeViews>()
     private var selectedMode = UsbMode.CHARGING
     private var token = 0
@@ -115,6 +115,7 @@ class UsbChooserActivity : ComponentActivity() {
         val definitions = listOf(
             ModeDefinition(UsbMode.CHARGING, R.id.option_charging, R.drawable.ic_battery_charging),
             ModeDefinition(UsbMode.MTP, R.id.option_mtp, R.drawable.ic_folder_transfer),
+            ModeDefinition(UsbMode.PTP, R.id.option_ptp, R.drawable.ic_photo_transfer),
             ModeDefinition(UsbMode.RNDIS, R.id.option_rndis, R.drawable.ic_network_share),
         )
         definitions.forEach { definition ->
@@ -340,6 +341,7 @@ class UsbChooserActivity : ComponentActivity() {
     private fun modeDescription(mode: UsbMode): Int = when (mode) {
         UsbMode.CHARGING -> R.string.chooser_mode_charging_description
         UsbMode.MTP -> R.string.chooser_mode_mtp_description
+        UsbMode.PTP -> R.string.chooser_mode_ptp_description
         UsbMode.RNDIS -> R.string.chooser_mode_rndis_description
     }
 
