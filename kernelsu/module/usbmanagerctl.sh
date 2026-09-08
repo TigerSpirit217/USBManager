@@ -29,6 +29,26 @@ case "$1" in
         apply_usb_config none 0
         echo closed
         ;;
+    reboot)
+        token=$2
+        target=$3
+        [ -f "$SESSION_FILE" ] || { echo no_session; exit 2; }
+        expected_token=$(cat "$SESSION_FILE" 2>/dev/null)
+        [ "$token" = "$expected_token" ] || { echo bad_token; exit 3; }
+        case "$target" in system|recovery|bootloader|fastboot) ;;
+            *) echo bad_reboot_target; exit 5 ;;
+        esac
+        rm -f "$SESSION_FILE" "$CHOICE_FILE"
+        log_msg "Reboot requested target=$target"
+        sync
+        if [ "$target" = "system" ]; then
+            reboot
+            setprop sys.powerctl reboot
+        else
+            reboot "$target"
+            setprop sys.powerctl "reboot,$target"
+        fi
+        ;;
     status)
         echo "role=$(usb_role)"
         echo "type=$(usb_type)"
@@ -37,7 +57,7 @@ case "$1" in
         echo "adbd=$(getprop init.svc.adbd)"
         ;;
     *)
-        echo "usage: $0 apply|close|status"
+        echo "usage: $0 apply|close|reboot|status"
         exit 1
         ;;
 esac

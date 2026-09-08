@@ -21,6 +21,10 @@ object UsbConfigSender {
         write(context, "close|$token")
     }
 
+    fun reboot(context: Context, target: String, token: Int) {
+        write(context, "reboot|$token|$target")
+    }
+
     private fun write(context: Context, payload: String) {
         runCatching {
             val dir = context.getExternalFilesDir(null) ?: context.filesDir

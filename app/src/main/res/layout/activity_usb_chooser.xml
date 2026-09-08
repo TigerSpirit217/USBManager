@@ -172,6 +172,20 @@
                     android:textColor="@color/usb_text_tertiary"
                     android:textSize="11sp" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/more_options_button"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="5dp"
+                    android:text="@string/chooser_more_options"
+                    android:textAllCaps="false"
+                    android:textColor="@color/usb_accent"
+                    app:icon="@drawable/ic_chevron_right"
+                    app:iconGravity="textEnd"
+                    app:iconPadding="5dp"
+                    app:iconTint="@color/usb_accent" />
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

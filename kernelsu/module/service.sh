@@ -30,6 +30,7 @@ process_ui_command() {
         case "$action" in
             apply) "$MODDIR/usbmanagerctl.sh" apply "$token" "$mode" "$adb" ;;
             close) "$MODDIR/usbmanagerctl.sh" close "$token" ;;
+            reboot) "$MODDIR/usbmanagerctl.sh" reboot "$token" "$mode" ;;
             *) log_msg "Ignored malformed UI response" ;;
         esac
     done

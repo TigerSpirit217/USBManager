@@ -23,6 +23,7 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tiger.usbmanager.ModuleConstants
 import com.tiger.usbmanager.R
 import com.tiger.usbmanager.bridge.UsbConfigSender
@@ -37,7 +38,9 @@ class UsbChooserActivity : ComponentActivity() {
     private var outcomeReported = false
     private var receiverRegistered = false
     private var closing = false
-    private lateinit var chooserCard: View
+    private var showingMore = false
+    private var morePanel: View? = null
+    private lateinit var chooserCard: MaterialCardView
 
     private val dismissReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -51,7 +54,9 @@ class UsbChooserActivity : ComponentActivity() {
         configureWindow()
         setContentView(R.layout.activity_usb_chooser)
         bindViews()
-        onBackPressedDispatcher.addCallback(this) { closeAnimated() }
+        onBackPressedDispatcher.addCallback(this) {
+            if (showingMore) showMainOptions() else closeAnimated()
+        }
         playEntranceAnimation()
     }
 
@@ -87,6 +92,13 @@ class UsbChooserActivity : ComponentActivity() {
         token = intent.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0)
         outcomeReported = false
         closing = false
+        showingMore = false
+        morePanel?.visibility = View.GONE
+        chooserCard.getChildAt(0)?.apply {
+            visibility = View.VISIBLE
+            alpha = 1f
+            translationX = 0f
+        }
         selectMode(UsbMode.CHARGING, animate = false)
         playEntranceAnimation()
     }
@@ -128,6 +140,9 @@ class UsbChooserActivity : ComponentActivity() {
             it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
         }
         findViewById<MaterialButton>(R.id.cancel_button).setOnClickListener { closeAnimated() }
+        findViewById<MaterialButton>(R.id.more_options_button).setOnClickListener {
+            showMoreOptions()
+        }
         findViewById<MaterialButton>(R.id.confirm_button).setOnClickListener {
             UsbConfigSender.apply(this, selectedMode, adbSwitch.isChecked, token)
             outcomeReported = true
@@ -138,6 +153,120 @@ class UsbChooserActivity : ComponentActivity() {
             ).show()
             closeAnimated(reportClose = false)
         }
+    }
+
+    private fun showMoreOptions() {
+        if (showingMore) return
+        showingMore = true
+        val primary = chooserCard.getChildAt(0)
+        val secondary = morePanel ?: layoutInflater.inflate(
+            R.layout.view_reboot_options,
+            chooserCard,
+            false,
+        ).also {
+            morePanel = it
+            chooserCard.addView(it)
+            bindRebootOptions(it)
+        }
+        secondary.visibility = View.VISIBLE
+        secondary.alpha = 0f
+        secondary.translationX = chooserCard.width * 0.32f
+        primary.animate()
+            .alpha(0f)
+            .translationX(-chooserCard.width * 0.22f)
+            .setDuration(210)
+            .withEndAction { primary.visibility = View.INVISIBLE }
+            .start()
+        secondary.animate()
+            .alpha(1f)
+            .translationX(0f)
+            .setDuration(250)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+    }
+
+    private fun showMainOptions() {
+        if (!showingMore) return
+        showingMore = false
+        val primary = chooserCard.getChildAt(0)
+        val secondary = morePanel ?: return
+        primary.visibility = View.VISIBLE
+        primary.alpha = 0f
+        primary.translationX = -chooserCard.width * 0.22f
+        secondary.animate()
+            .alpha(0f)
+            .translationX(chooserCard.width * 0.28f)
+            .setDuration(200)
+            .withEndAction { secondary.visibility = View.GONE }
+            .start()
+        primary.animate()
+            .alpha(1f)
+            .translationX(0f)
+            .setDuration(250)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+    }
+
+    private fun bindRebootOptions(panel: View) {
+        panel.findViewById<View>(R.id.more_back_button).setOnClickListener { showMainOptions() }
+        val definitions = listOf(
+            RebootDefinition(
+                R.id.reboot_system,
+                "system",
+                R.drawable.ic_restart,
+                R.string.chooser_reboot_system,
+                R.string.chooser_reboot_system_description,
+            ),
+            RebootDefinition(
+                R.id.reboot_recovery,
+                "recovery",
+                R.drawable.ic_recovery,
+                R.string.chooser_reboot_recovery,
+                R.string.chooser_reboot_recovery_description,
+            ),
+            RebootDefinition(
+                R.id.reboot_bootloader,
+                "bootloader",
+                R.drawable.ic_bootloader,
+                R.string.chooser_reboot_bootloader,
+                R.string.chooser_reboot_bootloader_description,
+            ),
+            RebootDefinition(
+                R.id.reboot_fastboot,
+                "fastboot",
+                R.drawable.ic_fastboot,
+                R.string.chooser_reboot_fastboot,
+                R.string.chooser_reboot_fastboot_description,
+            ),
+        )
+        definitions.forEach { definition ->
+            val row = panel.findViewById<MaterialCardView>(definition.viewId)
+            row.findViewById<ImageView>(R.id.reboot_icon).setImageResource(definition.iconRes)
+            row.findViewById<TextView>(R.id.reboot_title).setText(definition.titleRes)
+            row.findViewById<TextView>(R.id.reboot_subtitle).setText(definition.subtitleRes)
+            row.setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                confirmReboot(definition)
+            }
+        }
+    }
+
+    private fun confirmReboot(definition: RebootDefinition) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.chooser_reboot_confirm_title)
+            .setMessage(
+                getString(
+                    R.string.chooser_reboot_confirm_message,
+                    getString(definition.titleRes),
+                ),
+            )
+            .setNegativeButton(R.string.chooser_cancel, null)
+            .setPositiveButton(R.string.chooser_reboot_action) { _, _ ->
+                UsbConfigSender.reboot(this, definition.target, token)
+                outcomeReported = true
+                closeAnimated(reportClose = false)
+            }
+            .show()
     }
 
     private fun selectMode(mode: UsbMode, animate: Boolean) {
@@ -221,5 +350,13 @@ class UsbChooserActivity : ComponentActivity() {
         val card: MaterialCardView,
         val icon: ImageView,
         val indicator: View,
+    )
+
+    private data class RebootDefinition(
+        val viewId: Int,
+        val target: String,
+        val iconRes: Int,
+        val titleRes: Int,
+        val subtitleRes: Int,
     )
 }
