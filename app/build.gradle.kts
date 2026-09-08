@@ -13,8 +13,8 @@ android {
         applicationId = "com.tiger.usbmanager"
         minSdk = 26
         targetSdk = 37
-        versionCode = 14
-        versionName = "14"
+        versionCode = 15
+        versionName = "15"
     }
 
     buildTypes {

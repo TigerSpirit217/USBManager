@@ -29,4 +29,18 @@
     <color name="banner_loading_text">#FF8D6E63</color>
     <!-- Log viewer text -->
     <color name="log_text">#FF222222</color>
+
+    <!-- USB chooser -->
+    <color name="usb_surface">#FFFFFFFF</color>
+    <color name="usb_accent">#FF3478F6</color>
+    <color name="usb_accent_soft">#FFEAF2FF</color>
+    <color name="usb_text_primary">#FF151922</color>
+    <color name="usb_text_secondary">#FF667085</color>
+    <color name="usb_text_tertiary">#FF98A2B3</color>
+    <color name="usb_option_normal">#FFF8F9FB</color>
+    <color name="usb_option_selected">#FFF0F6FF</color>
+    <color name="usb_option_border">#FFE5E9F0</color>
+    <color name="usb_icon_inactive">#FF7B8495</color>
+    <color name="usb_indicator_inactive">#FFC8CFDA</color>
+    <color name="usb_adb_background">#FFF4F7FC</color>
 </resources>

@@ -18,7 +18,7 @@ APK 只负责显示窗口和提交选择，Root 操作全部由 KernelSU 脚本�
 
 发布包已经包含 APK，不需要单独安装：
 
-1. 下载 `USBManager-KernelSU-v14.zip`。
+1. 下载 `USBManager-KernelSU-v15.zip`。
 2. 在 KernelSU 管理器中选择“模块 → 从本地安装”，选择该 ZIP。
 3. 安装完成后重启设备。
 
@@ -27,7 +27,7 @@ APK 只负责显示窗口和提交选择，Root 操作全部由 KernelSU 脚本�
 模块包结构如下：
 
 ```text
-USBManager-KernelSU-v14.zip
+USBManager-KernelSU-v15.zip
 ├── module.prop
 ├── customize.sh
 ├── post-fs-data.sh
@@ -59,6 +59,6 @@ python3 kernelsu/package_module.py
 输出文件：
 
 - `app/build/outputs/apk/debug/app-debug.apk`
-- `kernelsu/USBManager-KernelSU-v14.zip`
+- `kernelsu/USBManager-KernelSU-v15.zip`
 
 每次推送和 Pull Request 都会由 GitHub Actions 构建模块并保存 workflow artifact；发布 GitHub Release 时，构建出的 ZIP 会自动附加到该 Release。

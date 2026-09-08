@@ -30,6 +30,13 @@
     <string name="chooser_no_adb_description">接入后 5 秒内未收到 ADB 密钥，无法识别此设备。请选择本次仅充电或文件传输；此次选择不会保存。</string>
     <string name="chooser_manual_title">选择 USB 连接方式</string>
     <string name="chooser_manual_description">请选择本次使用仅充电、文件传输或 USB 网络共享；如有需要，可同时开启 ADB 调试。本次选择不会保存。</string>
+    <string name="chooser_connection_subtitle">已安全连接，当前保持仅充电</string>
+    <string name="chooser_mode_section">本次连接方式</string>
+    <string name="chooser_mode_charging_description">保持数据通道关闭，更安全</string>
+    <string name="chooser_mode_mtp_description">浏览和传输手机中的文件</string>
+    <string name="chooser_mode_rndis_description">通过 USB 向电脑共享网络</string>
+    <string name="chooser_adb_description">允许这台电脑发起调试连接</string>
+    <string name="chooser_one_time_hint">选择仅对本次连接有效，拔线后自动恢复仅充电</string>
     <string name="chooser_host_label">当前电脑：%1$s</string>
     <string name="chooser_host_unknown">未识别电脑</string>
     <string name="chooser_mode_charging">仅充电</string>

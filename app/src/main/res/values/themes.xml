@@ -7,8 +7,14 @@
         <item name="android:windowBackground">@color/bg_page</item>
     </style>
 
-    <style name="Theme.USBManager.Dialog" parent="android:Theme.Material.Light.Dialog">
-        <item name="android:colorAccent">@color/accent</item>
+    <style name="Theme.USBManager.Dialog" parent="Theme.MaterialComponents.DayNight.Dialog.Alert">
+        <item name="colorPrimary">@color/usb_accent</item>
+        <item name="colorSecondary">@color/usb_accent</item>
+        <item name="android:colorAccent">@color/usb_accent</item>
         <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowMinWidthMajor">100%</item>
+        <item name="android:windowMinWidthMinor">100%</item>
+        <item name="android:windowCloseOnTouchOutside">false</item>
     </style>
 </resources>
