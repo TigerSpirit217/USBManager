@@ -42,7 +42,7 @@
     <string name="activation_guide_message">1. 打开 LSPosed 管理器（LSPosed Manager / Magisk 中的 LSPosed 入口）\n\n2. 进入「模块」页，找到「USB 管理器」，点进详情\n\n3. 打开右上角的启用开关\n\n4. 在「作用域」(Scope) 中，勾选「system」（system_server 专用 scope）\n\n5. 返回模块列表，选择「重启」(Reboot) 或在终端执行：\n   adb shell killall system_server\n\n重启完成后回到本应用点击「重新检测」，显示「模块已激活」即成功。\n\n如果仍不生效，请在 LSPosed Manager 中查看模块日志。</string>
     <string name="action_get_logs">获取日志方法</string>
     <string name="logs_how_to_title">获取 USBManager Hook 日志</string>
-    <string name="logs_how_to_message">1. 打开 LSPosed Manager（或 LSPosed 模块管理器）\n2. 进入「模块」标签页\n3. 找到 USBManager，点击进入详情页\n4. 点右上角 ⋮（更多）菜单\n5. 点「查看日志」→ 就可以看到完整的 Hook 日志，包括：\n     • 模块是否被注入 system_server\n     • 每次插入/拔出 USB 的事件\n     • 用户选择后 APPLY_USB_CONFIG 是否被收到\n     • 模式切换、ADB 开关是否成功执行\n\n【备选：命令行】\n  adb logcat -c &amp;&amp; adb logcat -s USBManager:V LSPosedFramework:V\n\n（写入 Android/data/.../logs/ 的方案在 NothingOS/Android 16\n下会因为 system_server 无其它 app 存储目录写权限而失败，\n所以统一用 LSPosed 内置日志查看器。）</string>
+    <string name="logs_how_to_message">1. 打开 LSPosed Manager（或 LSPosed 模块管理器）\n2. 进入「模块」标签页\n3. 找到 USBManager，点击进入详情页\n4. 点右上角 ⋮（更多）菜单\n5. 点「查看日志」→ 就可以看到完整的 Hook 日志，包括：\n     • 模块是否被注入 system_server\n     • 每次插入/拔出 USB 的事件\n     • 用户选择后 APPLY_USB_CONFIG 是否被收到\n     • 模式切换、ADB 开关是否成功执行\n\n【备选：命令行】\n  adb logcat -c &amp;&amp; adb logcat -s USBManager:V LSPosedFramework:V</string>
     <string name="dialog_got_it">知道了</string>
     <string name="dialog_cancel">取消</string>
 
@@ -58,7 +58,7 @@
     <string name="chooser_confirm">确定</string>
 
     <!-- ModuleActivationCheck -->
-    <string name="check_inactive_reason">模块未被 LSPosed 激活。请在 LSPosed 管理器中：点击本模块 → 打开开关 → 作用域勾选「android（系统框架）」 → 重启手机。</string>
+    <string name="check_inactive_reason">模块未被 LSPosed 激活。请在 LSPosed 管理器中：点击本模块 → 打开开关 → 作用域勾选「system（系统框架）」 → 重启手机。</string>
     <string name="check_unknown_note">LSPosed 已启用本模块，但 system_server 尚未加载模块（系统属性未设置）。请重启手机后再次检测。</string>
 
     <!-- Notification (used inside system_server) -->

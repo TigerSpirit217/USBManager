@@ -42,7 +42,7 @@
     <string name="activation_guide_message">1. Open LSPosed Manager (or its entry in Magisk)\n\n2. Go to the Modules page, find \"USB Manager\", and open its details\n\n3. Turn on the enable switch in the top-right corner\n\n4. Under Scope, tick \"system\" (the system_server-specific scope)\n\n5. Go back and choose Reboot, or run:\n   adb shell killall system_server\n\nAfter rebooting, return here and tap \"Re-check\" — \"Module active\" means success.\n\nIf it still doesn\'t work, check the module log in LSPosed Manager.</string>
     <string name="action_get_logs">How to get logs</string>
     <string name="logs_how_to_title">Getting USBManager hook logs</string>
-    <string name="logs_how_to_message">1. Open LSPosed Manager (or the LSPosed module manager)\n2. Go to the Modules tab\n3. Find USBManager and open its details\n4. Tap the ⋮ (more) menu in the top-right corner\n5. Tap \"View logs\" to see the full hook log, including:\n     • Whether the module was injected into system_server\n     • Each USB plug/unplug event\n     • Whether APPLY_USB_CONFIG was received after your choice\n     • Whether the mode switch and ADB toggle succeeded\n\n[Alternative: command line]\n  adb logcat -c &amp;&amp; adb logcat -s USBManager:V LSPosedFramework:V\n\n(Writing to Android/data/.../logs/ fails on NothingOS/Android 16\nbecause system_server can\'t write to another app\'s private storage,\nso we use LSPosed\'s built-in log viewer.)</string>
+    <string name="logs_how_to_message">1. Open LSPosed Manager (or the LSPosed module manager)\n2. Go to the Modules tab\n3. Find USBManager and open its details\n4. Tap the ⋮ (more) menu in the top-right corner\n5. Tap \"View logs\" to see the full hook log, including:\n     • Whether the module was injected into system_server\n     • Each USB plug/unplug event\n     • Whether APPLY_USB_CONFIG was received after your choice\n     • Whether the mode switch and ADB toggle succeeded\n\n[Alternative: command line]\n  adb logcat -c &amp;&amp; adb logcat -s USBManager:V LSPosedFramework:V</string>
     <string name="dialog_got_it">Got it</string>
     <string name="dialog_cancel">Cancel</string>
 
@@ -58,7 +58,7 @@
     <string name="chooser_confirm">OK</string>
 
     <!-- ModuleActivationCheck -->
-    <string name="check_inactive_reason">The module is not activated in LSPosed. In LSPosed Manager: tap this module → enable it → tick \"android (system framework)\" in scope → reboot.</string>
+    <string name="check_inactive_reason">The module is not activated in LSPosed. In LSPosed Manager: tap this module → enable it → tick \"system (system framework)\" in scope → reboot.</string>
     <string name="check_unknown_note">LSPosed has enabled this module, but system_server hasn\'t loaded it yet (system property unset). Reboot and re-check.</string>
 
     <!-- Notification (used inside system_server) -->
