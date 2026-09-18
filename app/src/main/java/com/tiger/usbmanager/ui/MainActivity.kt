@@ -23,6 +23,7 @@ import com.tiger.usbmanager.policy.UsbMode
 
 class MainActivity : Activity() {
     private lateinit var activationStatusContainer: LinearLayout
+    private var defaultConfigSummaryView: TextView? = null
     private var hasResumed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -215,11 +216,11 @@ class MainActivity : Activity() {
     private fun settingsCard(): MaterialCardView = surfaceCard().apply {
         addView(LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.VERTICAL
-            val mode = getString(UsbMode.fromWire(ModuleSettings.defaultMode()).displayRes)
-            val adb = getString(if (ModuleSettings.defaultAdb()) R.string.settings_adb_on else R.string.settings_adb_off)
-            addView(valueRow(getString(R.string.settings_default_usb_config), getString(R.string.settings_default_usb_summary, mode, adb)) {
-                startActivity(Intent(this@MainActivity, DefaultUsbConfigActivity::class.java))
-            })
+            addView(valueRow(
+                getString(R.string.settings_default_usb_config),
+                defaultConfigSummary(),
+                onValueBound = { defaultConfigSummaryView = it },
+            ) { startActivity(Intent(this@MainActivity, DefaultUsbConfigActivity::class.java)) })
             addView(divider())
             addView(toggleRow(getString(R.string.settings_disconnect_auto_off), ModuleSettings.disconnectAutoOffAdb()) {
                 ModuleSettings.prefs().edit().putBoolean(ModuleSettings.KEY_DISCONNECT_AUTO_OFF_ADB, it).apply()
@@ -239,14 +240,31 @@ class MainActivity : Activity() {
         })
     }
 
-    private fun valueRow(title: String, value: String, click: () -> Unit) = LinearLayout(this).apply {
+    private fun defaultConfigSummary(): String {
+        val mode = getString(UsbMode.fromWire(ModuleSettings.defaultMode()).displayRes)
+        val adb = getString(if (ModuleSettings.defaultAdb()) R.string.settings_adb_on else R.string.settings_adb_off)
+        return getString(R.string.settings_default_usb_summary, mode, adb)
+    }
+
+    private fun valueRow(
+        title: String,
+        value: String,
+        onValueBound: ((TextView) -> Unit)? = null,
+        click: () -> Unit,
+    ) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         isClickable = true
         isFocusable = true
         setPadding(dp(16), dp(14), dp(16), dp(14))
         setOnClickListener { click() }
         addView(TextView(this@MainActivity).apply { text = title; textSize = 15f; setTextColor(getColor(R.color.text_primary)) })
-        addView(TextView(this@MainActivity).apply { text = value; textSize = 12f; setTextColor(getColor(R.color.usb_text_secondary)); setPadding(0, dp(3), 0, 0) })
+        addView(TextView(this@MainActivity).apply {
+            text = value
+            textSize = 12f
+            setTextColor(getColor(R.color.usb_text_secondary))
+            setPadding(0, dp(3), 0, 0)
+            onValueBound?.invoke(this)
+        })
     }
 
     private fun toggleRow(title: String, checked: Boolean, changed: (Boolean) -> Unit) = LinearLayout(this).apply {
@@ -300,7 +318,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (hasResumed && ::activationStatusContainer.isInitialized) showConfigManager()
+        if (hasResumed) defaultConfigSummaryView?.text = defaultConfigSummary()
         hasResumed = true
     }
 }
