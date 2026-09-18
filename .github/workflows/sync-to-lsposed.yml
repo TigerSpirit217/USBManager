@@ -9,7 +9,7 @@ on:
       - "README.md"
       - "LICENSE"
 
-  # 手动发布 Release 时触发
+  # 手动发布或编辑 Release 时触发
   release:
     types: [published, edited]
 
@@ -128,67 +128,177 @@ jobs:
             echo "EOF_BODY"
           } >> "$GITHUB_OUTPUT"
 
-          # 提取 APK/ZIP 下载链接
+          # 提取 assets 信息（包含 digest 和 download_url）
           echo "$RESP" | jq -r \
-            '.assets[] | select(.name | test("\\.(apk|zip)$")) | "\(.browser_download_url)|\(.name)"' \
+            '.assets[] | select(.name | test("\\.(apk|zip)$")) | "\(.name)|\(.browser_download_url)|\(.digest // empty)"' \
             > assets_list.txt
 
           echo "📦 源 Release: $TAG_NAME"
           cat assets_list.txt
 
-      - name: Check duplicate
-        id: dup
+      - name: Find target release
+        id: target
         run: |
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          TAG="${{ steps.resolve.outputs.tag }}"
+
+          # 先查 tags 端点（已发布 Release）
+          RESP=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: Bearer $PAT" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$LSPOSED_REPO/releases/tags/${{ steps.resolve.outputs.tag }}")
+            "https://api.github.com/repos/$LSPOSED_REPO/releases/tags/$TAG")
 
-          EXISTS=false
-          [ "$CODE" = "200" ] && EXISTS=true
-          echo "exists=$EXISTS" >> "$GITHUB_OUTPUT"
-          echo "重复检查: ${{ steps.resolve.outputs.tag }} → exists=$EXISTS"
+          HTTP_CODE=$(echo "$RESP" | tail -n1)
+          BODY=$(echo "$RESP" | sed '$d')
 
-      - name: Download assets
-        if: steps.dup.outputs.exists == 'false'
-        run: |
-          mkdir -p artifacts
-          while IFS='|' read -r url filename; do
-            [ -z "$url" ] && continue
-            echo "⬇️  下载 $filename ..."
-            curl -fSL --retry 3 -o "artifacts/$filename" "$url"
-          done < assets_list.txt
-          ls -lh artifacts/
-
-      - name: Create Release on LSPosed repo
-        if: steps.dup.outputs.exists == 'false'
-        run: |
-          # Step 1: 创建 Release（不含 asset）
-          BODY=$(jq -n \
-            --arg tag "${{ steps.resolve.outputs.tag }}" \
-            --arg name "${{ steps.resolve.outputs.name }}" \
-            --arg body "${{ steps.resolve.outputs.body }}" \
-            --argjson pre ${{ steps.resolve.outputs.prerelease }} \
-            '{tag_name: $tag, name: $name, body: $body, draft: false, prerelease: $pre}')
-
-          RESP=$(curl -sf -X POST \
-            -H "Authorization: Bearer $PAT" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$LSPOSED_REPO/releases" \
-            -d "$BODY")
-
-          UPLOAD_URL=$(echo "$RESP" | jq -r '.upload_url' | sed 's/{?name,label}//')
-          RELEASE_ID=$(echo "$RESP" | jq -r '.id')
-
-          if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
-            echo "::error::创建 Release 失败"
-            echo "$RESP" | jq .
-            exit 1
+          # 如果 tags 端点查不到，再查所有 Release（包含 draft）
+          if [ "$HTTP_CODE" != "200" ]; then
+            BODY=$(curl -sf \
+              -H "Authorization: Bearer $PAT" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$LSPOSED_REPO/releases?per_page=100" \
+              | jq -c --arg tag "$TAG" '.[] | select(.tag_name == $tag)')
           fi
 
-          echo "✅ Release 已创建 (ID: $RELEASE_ID)"
+          if [ -n "$BODY" ] && [ "$BODY" != "null" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "release_id=$(echo "$BODY" | jq -r '.id')" >> "$GITHUB_OUTPUT"
+            echo "upload_url=$(echo "$BODY" | jq -r '.upload_url' | sed 's/{?name,label}//')" >> "$GITHUB_OUTPUT"
+            # 提取目标仓库已有 assets 的名称和 digest
+            echo "$BODY" | jq -r '.assets[] | "\(.name)|\(.id)|\(.digest // empty)"' > target_assets.txt
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            : > target_assets.txt
+          fi
 
-          # Step 2: 逐个上传 Asset
+      - name: Compare and download assets
+        id: compare
+        run: |
+          mkdir -p artifacts
+          NEED_UPLOAD=false
+
+          while IFS='|' read -r name url src_digest; do
+            [ -z "$name" ] && continue
+
+            # 查找目标仓库中同名 asset 的 digest
+            TARGET_LINE=$(grep "^${name}|" target_assets.txt || true)
+            TARGET_DIGEST=""
+            if [ -n "$TARGET_LINE" ]; then
+              TARGET_DIGEST=$(echo "$TARGET_LINE" | cut -d'|' -f3)
+            fi
+
+            echo "🔍 $name"
+            echo "   源 digest:  ${src_digest:-（无）}"
+            echo "   目标 digest: ${TARGET_DIGEST:-（无）}"
+
+            # 比较 digest
+            if [ -n "$src_digest" ] && [ "$src_digest" = "$TARGET_DIGEST" ]; then
+              echo "   ✅ digest 一致，跳过下载和上传"
+              continue
+            fi
+
+            # digest 不一致或缺失，需要下载
+            echo "   ⬇️  下载 $name ..."
+            curl -fSL --retry 3 -o "artifacts/$name" "$url"
+            NEED_UPLOAD=true
+          done < assets_list.txt
+
+          echo "need_upload=$NEED_UPLOAD" >> "$GITHUB_OUTPUT"
+
+      - name: Update or create release
+        if: steps.compare.outputs.need_upload == 'true' || steps.target.outputs.exists == 'false'
+        id: upsert
+        env:
+          BODY: ${{ steps.resolve.outputs.body }}
+        run: |
+          TAG="${{ steps.resolve.outputs.tag }}"
+          NAME="${{ steps.resolve.outputs.name }}"
+          PRE="${{ steps.resolve.outputs.prerelease }}"
+
+          # 用文件保存 body，避免多行转义问题
+          printf '%s' "$BODY" > body.txt
+
+          if [ "${{ steps.target.outputs.exists }}" = "true" ]; then
+            RELEASE_ID="${{ steps.target.outputs.release_id }}"
+            echo "更新已有 Release ID: $RELEASE_ID"
+
+            # 先更新 body/name/prerelease，保持 draft 状态不变（避免已知的 race condition）
+            PAYLOAD=$(jq -n \
+              --arg name "$NAME" \
+              --rawfile body body.txt \
+              --argjson pre "$PRE" \
+              '{name: $name, body: $body, prerelease: $pre}')
+
+            curl -sf -X PATCH \
+              -H "Authorization: Bearer $PAT" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$LSPOSED_REPO/releases/$RELEASE_ID" \
+              -d "$PAYLOAD" > /dev/null
+
+            # 如果原来是 draft，再单独发一次 PATCH 将其发布
+            # 参考：https://github.com/orgs/community/discussions/191148
+            CURRENT_DRAFT=$(curl -sf \
+              -H "Authorization: Bearer $PAT" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$LSPOSED_REPO/releases/$RELEASE_ID" \
+              | jq -r '.draft')
+
+            if [ "$CURRENT_DRAFT" = "true" ]; then
+              echo "📤 将 draft 转为 published ..."
+              curl -sf -X PATCH \
+                -H "Authorization: Bearer $PAT" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$LSPOSED_REPO/releases/$RELEASE_ID" \
+                -d '{"draft": false}' > /dev/null
+            fi
+
+            UPLOAD_URL="${{ steps.target.outputs.upload_url }}"
+
+            # 删除需要替换的旧 asset
+            while IFS='|' read -r name url src_digest; do
+              [ -z "$name" ] && continue
+
+              # 如果本地没有下载这个文件，说明 digest 一致，保留旧 asset
+              [ ! -f "artifacts/$name" ] && continue
+
+              # 查找目标 asset ID
+              TARGET_LINE=$(grep "^${name}|" target_assets.txt || true)
+              if [ -n "$TARGET_LINE" ]; then
+                ASSET_ID=$(echo "$TARGET_LINE" | cut -d'|' -f2)
+                echo "🗑️ 删除旧 asset: $name (ID: $ASSET_ID)"
+                curl -sf -X DELETE \
+                  -H "Authorization: Bearer $PAT" \
+                  -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/repos/$LSPOSED_REPO/releases/assets/$ASSET_ID"
+              fi
+            done < assets_list.txt
+
+          else
+            echo "创建新 Release"
+
+            PAYLOAD=$(jq -n \
+              --arg tag "$TAG" \
+              --arg name "$NAME" \
+              --rawfile body body.txt \
+              --argjson pre "$PRE" \
+              '{tag_name: $tag, name: $name, body: $body, draft: false, prerelease: $pre}')
+
+            RESP=$(curl -sf -X POST \
+              -H "Authorization: Bearer $PAT" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$LSPOSED_REPO/releases" \
+              -d "$PAYLOAD")
+
+            UPLOAD_URL=$(echo "$RESP" | jq -r '.upload_url' | sed 's/{?name,label}//')
+            echo "✅ Release 已创建"
+          fi
+
+          echo "upload_url=$UPLOAD_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Upload assets
+        if: steps.compare.outputs.need_upload == 'true' || steps.target.outputs.exists == 'false'
+        run: |
+          UPLOAD_URL="${{ steps.upsert.outputs.upload_url }}"
+
           for FILE in artifacts/*; do
             [ ! -f "$FILE" ] && continue
             FNAME=$(basename "$FILE")
