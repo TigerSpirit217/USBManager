@@ -4,6 +4,8 @@
 
 An Android system module based on the **LSPosed** framework. When the phone is connected to a computer with a cable, it displays a USB chooser that lets the user select the USB mode and ADB state for that connection.
 
+### This module is 100% open source. The source code repository link can be found at the bottom of the page.
+
 -----
 
 <details>

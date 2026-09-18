@@ -120,4 +120,8 @@
     <string name="auth_experimental_badge">实验性</string>
     <string name="settings_status_section">运行状态</string>
     <string name="settings_logs_description">查看如何在 LSPosed 中获取模块日志</string>
+    <string name="developer_name">开发者：TigerSpirit217</string>
+    <string name="github_repository">GitHub · USBManager</string>
+    <string name="github_repository_url" translatable="false">https://github.com/TigerSpirit217/USBManager</string>
+    <string name="github_open_failed">未找到可打开链接的应用</string>
 </resources>

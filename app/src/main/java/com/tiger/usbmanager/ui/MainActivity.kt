@@ -2,6 +2,7 @@ package com.tiger.usbmanager.ui
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -11,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.view.WindowCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -113,6 +115,7 @@ class MainActivity : Activity() {
             addView(settingsCard())
             addView(sectionLabel(getString(R.string.auth_section_title)))
             addView(authenticationCard())
+            addView(developerFooter())
         }
         root.addView(ScrollView(this).apply {
             isFillViewport = true
@@ -244,6 +247,36 @@ class MainActivity : Activity() {
         val mode = getString(UsbMode.fromWire(ModuleSettings.defaultMode()).displayRes)
         val adb = getString(if (ModuleSettings.defaultAdb()) R.string.settings_adb_on else R.string.settings_adb_off)
         return getString(R.string.settings_default_usb_summary, mode, adb)
+    }
+
+    private fun developerFooter(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(dp(12), dp(24), dp(12), dp(8))
+        addView(TextView(this@MainActivity).apply {
+            text = getString(R.string.developer_name)
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(getColor(R.color.text_tertiary))
+        })
+        addView(TextView(this@MainActivity).apply {
+            text = getString(R.string.github_repository)
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(getColor(R.color.usb_accent))
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            background = roundedBackground(R.color.accent_soft, 14)
+            setOnClickListener { openGitHubRepository() }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(5)
+        })
+    }
+
+    private fun openGitHubRepository() {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.github_repository_url)))
+        runCatching { startActivity(intent) }.onFailure {
+            Toast.makeText(this, R.string.github_open_failed, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun valueRow(

@@ -120,4 +120,7 @@
     <string name="auth_experimental_badge">Experimental</string>
     <string name="settings_status_section">Status</string>
     <string name="settings_logs_description">Learn how to find module logs in LSPosed</string>
+    <string name="developer_name">Developer: TigerSpirit217</string>
+    <string name="github_repository">GitHub · USBManager</string>
+    <string name="github_open_failed">No app is available to open this link</string>
 </resources>
