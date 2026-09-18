@@ -26,6 +26,12 @@
     <string name="settings_module_settings">Module settings</string>
     <string name="settings_default_mode">Default USB mode</string>
     <string name="settings_default_adb">Default: enable USB debugging</string>
+    <string name="settings_default_usb_config">Default USB configuration</string>
+    <string name="settings_default_usb_summary">%1$s · %2$s</string>
+    <string name="settings_adb_on">USB debugging on</string>
+    <string name="settings_adb_off">USB debugging off</string>
+    <string name="settings_default_usb_subtitle">Choose the defaults for new connections</string>
+    <string name="settings_default_usb_hint">These options will be preselected the next time the USB chooser appears</string>
     <string name="settings_disconnect_auto_off">Turn ADB off on unplug</string>
     <string name="settings_chooser_while_locked">Show chooser while locked</string>
     <string name="auth_section_title">Experimental</string>
@@ -40,6 +46,7 @@
     <string name="auth_detect_fail">Detection failed. This device is not currently supported.</string>
     <string name="auth_supported">Computer identification is available</string>
     <string name="auth_enable">Enable computer identification (experimental)</string>
+    <string name="auth_applying_setting">Applying setting…</string>
     <string name="auth_allow_pair">Allow one new computer</string>
     <string name="auth_pair_starting">Pairing: keep the cable connected and the Windows companion running (up to 60 seconds after the interface is ready)…</string>
     <string name="auth_pair_ready">Pairing is ready. Keep USB connected and start the Windows backend.</string>
@@ -68,15 +75,25 @@
     <string name="logs_how_to_message">1. Open LSPosed Manager\n2. Go to the Logs page\n3. Tap the search box at the top and enter \"USBManager\"\n4. You can now view the complete hook log, including:\n     • Whether the module was injected into system_server\n     • Each USB plug/unplug event\n     • Whether APPLY_USB_CONFIG was received after your choice\n     • Whether the mode switch and ADB toggle succeeded\n\n[Alternative: command line]\n  adb logcat -c &amp;&amp; adb logcat -s USBManager:V LSPosedFramework:V</string>
     <string name="dialog_got_it">Got it</string>
     <string name="dialog_cancel">Cancel</string>
+    <string name="action_back">Back</string>
 
     <!-- UsbChooserActivity -->
     <string name="chooser_title">USB connection</string>
+    <string name="chooser_connection_subtitle">Computer connection detected</string>
+    <string name="chooser_mode_section">CHOOSE HOW TO USE THIS CONNECTION</string>
     <string name="chooser_mode_charging">Charge only</string>
+    <string name="chooser_mode_charging_description">Keep data access off and only charge this device</string>
     <string name="chooser_mode_mtp">File transfer (MTP)</string>
+    <string name="chooser_mode_mtp_description">Browse and transfer files between phone and computer</string>
     <string name="chooser_mode_ptp">Photo transfer (PTP)</string>
+    <string name="chooser_mode_ptp_description">Import photos and videos in camera mode</string>
     <string name="chooser_mode_rndis">USB tethering (RNDIS)</string>
+    <string name="chooser_mode_rndis_description">Share this phone’s network over USB</string>
     <string name="chooser_mode_midi">MIDI</string>
+    <string name="chooser_mode_midi_description">Connect MIDI instruments or music software</string>
     <string name="chooser_adb">Enable USB debugging</string>
+    <string name="chooser_adb_description">Allow Android Debug Bridge for this connection</string>
+    <string name="chooser_one_time_hint">This choice applies only to the current USB connection</string>
     <string name="chooser_cancel">Cancel</string>
     <string name="chooser_confirm">OK</string>
 
@@ -97,4 +114,10 @@
     <string name="auth_saved">Saved. The new configuration applies on the next recognition.</string>
     <string name="auth_save_failed">Could not save. Check root access and try again.</string>
     <string name="auth_config_missing">Configuration not set</string>
+    <string name="auth_adb_label">ADB</string>
+    <string name="auth_saved_config">%1$s%2$s</string>
+    <string name="auth_adb_enabled"> + ADB</string>
+    <string name="auth_experimental_badge">Experimental</string>
+    <string name="settings_status_section">Status</string>
+    <string name="settings_logs_description">Learn how to find module logs in LSPosed</string>
 </resources>

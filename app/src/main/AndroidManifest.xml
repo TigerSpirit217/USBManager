@@ -32,6 +32,12 @@
             android:name=".ui.UsbAuthenticationActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".ui.DefaultUsbConfigActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.USBManager.Dialog" />
+
         <!--
             Chooser dialog launched by the system_server hook when a USB host connects
             and a user decision is required. Exported so system_server (uid 1000) can

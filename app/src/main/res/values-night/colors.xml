@@ -1,4 +1,5 @@
 <resources>
+    <color name="black">#FFFFFF</color>
     <!-- Page background -->
     <color name="bg_page">#FF121212</color>
     <!-- Card / toolbar background -->
@@ -29,4 +30,28 @@
     <color name="banner_loading_text">#FFBCAAA4</color>
     <!-- Log viewer text -->
     <color name="log_text">#FFCCCCCC</color>
+
+    <!-- Shared modern surface system -->
+    <color name="surface_container">#FF191C22</color>
+    <color name="surface_variant">#FF20242C</color>
+    <color name="outline">#FF343A46</color>
+    <color name="accent_soft">#FF162C4B</color>
+    <color name="on_accent_soft">#FFA9C7FF</color>
+    <color name="scrim">#A6000000</color>
+
+    <!-- USB chooser -->
+    <color name="usb_surface">#FF1B1E24</color>
+    <color name="usb_accent">#FF7EAAFF</color>
+    <color name="usb_accent_pressed">#FF9AB9F6</color>
+    <color name="on_usb_accent">#FF0D1B33</color>
+    <color name="usb_accent_soft">#FF1B3153</color>
+    <color name="usb_text_primary">#FFF1F3F7</color>
+    <color name="usb_text_secondary">#FFB1B8C5</color>
+    <color name="usb_text_tertiary">#FF858E9D</color>
+    <color name="usb_option_normal">#FF22262E</color>
+    <color name="usb_option_selected">#FF1B3153</color>
+    <color name="usb_option_border">#FF363C47</color>
+    <color name="usb_icon_inactive">#FF9BA4B4</color>
+    <color name="usb_indicator_inactive">#FF687181</color>
+    <color name="usb_adb_background">#FF202A39</color>
 </resources>

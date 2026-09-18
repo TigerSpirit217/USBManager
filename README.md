@@ -100,6 +100,8 @@
 
 ## 许可证
 
+Copyright © TigerSpirit217 · Mulan PubL v2
+
 本项目使用木兰公共许可证，第 2 版（Mulan PubL v2）。完整授权见 [LICENSE](https://license.coscl.org.cn/MulanPubL-2.0)。
 
 ## 源码与发布

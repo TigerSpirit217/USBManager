@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:color="@color/usb_indicator_inactive" />
+    <item android:state_checked="true" android:color="@color/usb_accent" />
+    <item android:color="@color/usb_icon_inactive" />
+</selector>

@@ -26,6 +26,12 @@
     <string name="settings_module_settings">模块设置</string>
     <string name="settings_default_mode">默认 USB 模式</string>
     <string name="settings_default_adb">默认开启 USB 调试</string>
+    <string name="settings_default_usb_config">默认 USB 配置</string>
+    <string name="settings_default_usb_summary">%1$s · %2$s</string>
+    <string name="settings_adb_on">USB 调试开启</string>
+    <string name="settings_adb_off">USB 调试关闭</string>
+    <string name="settings_default_usb_subtitle">设置新连接默认使用的模式</string>
+    <string name="settings_default_usb_hint">此配置将在下次出现 USB 选择窗口时预先选中</string>
     <string name="settings_disconnect_auto_off">拔线自动关闭 ADB</string>
     <string name="settings_chooser_while_locked">锁屏时也弹出选择窗口</string>
     <string name="auth_section_title">实验性功能</string>
@@ -40,6 +46,7 @@
     <string name="auth_detect_fail">检测未通过，此设备当前暂不支持该功能。</string>
     <string name="auth_supported">此设备支持电脑识别与记忆功能</string>
     <string name="auth_enable">启用电脑识别与记忆（实验性）</string>
+    <string name="auth_applying_setting">正在应用设置…</string>
     <string name="auth_allow_pair">允许一台新电脑配对</string>
     <string name="auth_pair_starting">正在配对，请保持数据线连接并运行电脑后端（接口就绪后等待最多 60 秒）…</string>
     <string name="auth_pair_ready">配对窗口已打开。请保持数据线连接并确认电脑后端正在运行。</string>
@@ -68,15 +75,25 @@
     <string name="logs_how_to_message">1. 打开 LSPosed Manager\n2. 进入「日志」页面\n3. 点击上方搜索框，输入「USBManager」\n4. 即可看到完整的 Hook 日志，包括：\n     • 模块是否被注入 system_server\n     • 每次插入/拔出 USB 的事件\n     • 用户选择后 APPLY_USB_CONFIG 是否被收到\n     • 模式切换、ADB 开关是否成功执行\n\n【备选：命令行】\n  adb logcat -c &amp;&amp; adb logcat -s USBManager:V LSPosedFramework:V</string>
     <string name="dialog_got_it">知道了</string>
     <string name="dialog_cancel">取消</string>
+    <string name="action_back">返回</string>
 
     <!-- UsbChooserActivity -->
     <string name="chooser_title">USB 连接</string>
+    <string name="chooser_connection_subtitle">已检测到电脑连接</string>
+    <string name="chooser_mode_section">选择本次连接的用途</string>
     <string name="chooser_mode_charging">仅充电</string>
+    <string name="chooser_mode_charging_description">保持数据连接关闭，仅为设备充电</string>
     <string name="chooser_mode_mtp">文件传输 (MTP)</string>
+    <string name="chooser_mode_mtp_description">在电脑与手机之间浏览和传输文件</string>
     <string name="chooser_mode_ptp">图片传输 (PTP)</string>
+    <string name="chooser_mode_ptp_description">以相机模式导入照片和视频</string>
     <string name="chooser_mode_rndis">USB 网络共享 (RNDIS)</string>
+    <string name="chooser_mode_rndis_description">通过 USB 与电脑共享手机网络</string>
     <string name="chooser_mode_midi">MIDI</string>
+    <string name="chooser_mode_midi_description">连接 MIDI 乐器或音乐软件</string>
     <string name="chooser_adb">开启 USB 调试</string>
+    <string name="chooser_adb_description">允许此连接使用 Android 调试桥</string>
+    <string name="chooser_one_time_hint">本次选择仅应用于当前 USB 连接</string>
     <string name="chooser_cancel">取消</string>
     <string name="chooser_confirm">确定</string>
 
@@ -97,4 +114,10 @@
     <string name="auth_saved">已保存，下次识别该电脑时应用新配置。</string>
     <string name="auth_save_failed">保存失败，请检查 root 授权后重试。</string>
     <string name="auth_config_missing">未设置配置</string>
+    <string name="auth_adb_label">ADB</string>
+    <string name="auth_saved_config">%1$s%2$s</string>
+    <string name="auth_adb_enabled"> + ADB</string>
+    <string name="auth_experimental_badge">实验性</string>
+    <string name="settings_status_section">运行状态</string>
+    <string name="settings_logs_description">查看如何在 LSPosed 中获取模块日志</string>
 </resources>

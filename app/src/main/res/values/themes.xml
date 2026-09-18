@@ -1,14 +1,44 @@
 <resources>
-    <style name="Theme.USBManager" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:colorPrimary">@color/accent</item>
-        <item name="android:colorPrimaryDark">@color/accent</item>
-        <item name="android:colorAccent">@color/accent</item>
+    <style name="Theme.USBManager" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/usb_accent</item>
+        <item name="colorPrimaryVariant">@color/usb_accent_pressed</item>
+        <item name="colorSecondary">@color/usb_accent</item>
+        <item name="colorOnPrimary">@color/on_usb_accent</item>
+        <item name="android:colorAccent">@color/usb_accent</item>
+        <item name="colorControlActivated">@color/usb_accent</item>
+        <item name="android:colorControlActivated">@color/usb_accent</item>
+        <item name="colorControlHighlight">@color/usb_accent_soft</item>
+        <item name="android:colorControlHighlight">@color/usb_accent_soft</item>
+        <item name="android:buttonTint">@color/control_button_tint</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/bg_page</item>
+        <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowBackground">@color/bg_page</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.USBManager.AlertDialog</item>
     </style>
 
-    <style name="Theme.USBManager.Dialog" parent="android:Theme.Material.Light.Dialog">
-        <item name="android:colorAccent">@color/accent</item>
+    <style name="ThemeOverlay.USBManager.AlertDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorPrimary">@color/usb_accent</item>
+        <item name="colorSecondary">@color/usb_accent</item>
+        <item name="colorControlActivated">@color/usb_accent</item>
+        <item name="android:colorControlActivated">@color/usb_accent</item>
+    </style>
+
+    <style name="Theme.USBManager.Dialog" parent="Theme.MaterialComponents.DayNight.Dialog.Alert">
+        <item name="colorPrimary">@color/usb_accent</item>
+        <item name="colorPrimaryVariant">@color/usb_accent_pressed</item>
+        <item name="colorSecondary">@color/usb_accent</item>
+        <item name="colorOnPrimary">@color/on_usb_accent</item>
+        <item name="android:colorAccent">@color/usb_accent</item>
+        <item name="colorControlActivated">@color/usb_accent</item>
+        <item name="android:colorControlActivated">@color/usb_accent</item>
+        <item name="colorControlHighlight">@color/usb_accent_soft</item>
+        <item name="android:colorControlHighlight">@color/usb_accent_soft</item>
+        <item name="android:buttonTint">@color/control_button_tint</item>
         <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowMinWidthMajor">100%</item>
+        <item name="android:windowMinWidthMinor">100%</item>
+        <item name="android:windowCloseOnTouchOutside">false</item>
     </style>
 </resources>

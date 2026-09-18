@@ -101,6 +101,8 @@ Main log markers:
 
 ## License
 
+Copyright © TigerSpirit217 · Mulan PubL v2
+
 This project is licensed under the Mulan Public License, version 2 (Mulan PubL v2). See [LICENSE](https://license.coscl.org.cn/MulanPubL-2.0) for the full license.
 
 ## Source and Releases

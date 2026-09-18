@@ -1,0 +1,16 @@
+<!--
+    Third-party asset:
+    Original author: Phosphor
+    License: MIT License
+    Source: https://icon-icons.com/zh/icon/command-prompt/394764
+-->
+
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+  <path
+      android:pathData="M216,40L40,40A16,16 0,0 0,24 56L24,200a16,16 0,0 0,16 16L216,216a16,16 0,0 0,16 -16L232,56A16,16 0,0 0,216 40ZM125,134.25 L85,166.25a8,8 0,1 1,-10 -12.5L107.19,128 75,102.25a8,8 0,1 1,10 -12.5l40,32a8,8 0,0 1,0 12.5ZM176,168L136,168a8,8 0,0 1,0 -16h40a8,8 0,0 1,0 16Z"
+      android:fillColor="@color/black"/>
+</vector>
