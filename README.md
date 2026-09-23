@@ -6,6 +6,17 @@
 
 ### 本模块100%开源。源代码仓库链接见底部。
 
+<table>
+  <tr>
+    <td width=55%>
+      <img width=100% alt=connection src=https://github.com/user-attachments/assets/c52a89a6-349f-40e6-9c2e-04f26d19add5 />
+    </td>
+    <td width=45%>
+      <img width=100% alt=mainpage src=https://github.com/user-attachments/assets/835f210d-d1c3-4d1a-8abe-21eccf3b8f5b />
+    </td>
+  </tr>
+</table>
+
 -----
 
 <details>
