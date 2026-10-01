@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     alias(libs.plugins.androidApplication)
 }
@@ -8,7 +6,7 @@ android {
     namespace = "com.tiger.usbmanager"
     compileSdk = 37
     buildToolsVersion = "37.0.0"
-    ndkVersion = "27.2.12479018"
+    ndkVersion = "30.0.16248370"
 
     defaultConfig {
         applicationId = "com.tiger.usbmanager"
@@ -64,17 +62,16 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+}
 
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_21)
-            freeCompilerArgs.addAll(
-                "-Xno-param-assertions",
-                "-Xno-call-assertions",
-                "-Xno-receiver-assertions",
-                "-language-version=2.0",
-            )
-        }
+kotlin {
+    // Built-in Kotlin inherits JVM 21 from android.compileOptions.
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-Xno-param-assertions",
+            "-Xno-call-assertions",
+            "-Xno-receiver-assertions",
+        )
     }
 }
 
@@ -84,6 +81,8 @@ configurations.all {
 }
 
 dependencies {
+    implementation(platform(libs.kotlin.bom))
+    implementation(libs.core)
     compileOnly(libs.libxposed.api)
     implementation(libs.libxposed.service)
     implementation(libs.appcompat)
