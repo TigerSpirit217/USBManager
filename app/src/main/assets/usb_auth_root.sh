@@ -7,6 +7,7 @@ LIB=${3:-}
 MODE=${4:-closed}
 BACKEND=${5:-none}
 PROFILE=${6:-none}
+APP_PROCESS=${7:-/system/bin/app_process}
 ROOT=/data/adb/usbmanager-auth
 HOSTS=$ROOT/hosts
 RUN=$ROOT/session
@@ -37,8 +38,8 @@ if [ "${USBMANAGER_GLOBAL:-0}" != 1 ] && [ -x /data/adb/ksud ] && [ "$ACTION" !=
         esac
     fi
     STATUS=0
-    OUTPUT=$(printf 'USBMANAGER_GLOBAL=1 USBMANAGER_PARENT_ADB=%s sh %s %s %s %s %s %s %s\nexit\n' \
-        "$OUTER_ADB" "$0" "$ACTION" "$APK" "$LIB" "$MODE" "$BACKEND" "$PROFILE" | /data/adb/ksud debug su -g) || STATUS=$?
+    OUTPUT=$(printf 'USBMANAGER_GLOBAL=1 USBMANAGER_PARENT_ADB=%s sh %s %s %s %s %s %s %s %s\nexit\n' \
+        "$OUTER_ADB" "$0" "$ACTION" "$APK" "$LIB" "$MODE" "$BACKEND" "$PROFILE" "$APP_PROCESS" | /data/adb/ksud debug su -g) || STATUS=$?
     printf '%s\n' "$OUTPUT"
     RESTORE_LINE=$(printf '%s\n' "$OUTPUT" | grep '^FRAMEWORK_RESTORE ' | tail -n 1 || true)
     if [ -n "$RESTORE_LINE" ]; then
@@ -70,7 +71,7 @@ daemon_start() {
     LOG=$3
     RESULT=$4
     rm -f "$RESULT" "$RESULT.tmp"
-    CLASSPATH="$APK" app_process /system/bin "$DAEMON_CLASS" "$LIB" "$MOUNT" "$HOSTS" "$PAIR" "$RESULT" "$PROFILE" > "$LOG" 2>&1 &
+    CLASSPATH="$APK" "$APP_PROCESS" /system/bin "$DAEMON_CLASS" "$LIB" "$MOUNT" "$HOSTS" "$PAIR" "$RESULT" "$PROFILE" > "$LOG" 2>&1 &
     DAEMON=$!
     # app_process normally becomes ready in well under a second. Polling once per
     # second added a full second to every cable insertion on the common path.
@@ -407,10 +408,10 @@ case "$ACTION" in
     restore
     ;;
   list)
-    CLASSPATH="$APK" app_process /system/bin "$DAEMON_CLASS" list "$HOSTS"
+    CLASSPATH="$APK" "$APP_PROCESS" /system/bin "$DAEMON_CLASS" list "$HOSTS"
     ;;
   edit)
-    CLASSPATH="$APK" app_process /system/bin "$DAEMON_CLASS" edit "$HOSTS" "$MODE" "$PROFILE"
+    CLASSPATH="$APK" "$APP_PROCESS" /system/bin "$DAEMON_CLASS" edit "$HOSTS" "$MODE" "$PROFILE"
     ;;
   delete)
     ID=$MODE

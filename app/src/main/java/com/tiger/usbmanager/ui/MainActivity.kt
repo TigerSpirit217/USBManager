@@ -26,6 +26,7 @@ import com.tiger.usbmanager.policy.UsbMode
 class MainActivity : Activity() {
     private lateinit var activationStatusContainer: LinearLayout
     private var defaultConfigSummaryView: TextView? = null
+    private var gameDndSummaryView: TextView? = null
     private var hasResumed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -233,6 +234,10 @@ class MainActivity : Activity() {
                 ModuleSettings.prefs().edit().putBoolean(ModuleSettings.KEY_CHOOSER_WHILE_LOCKED, it).apply()
             })
             addView(divider())
+            addView(valueRow(getString(R.string.game_dnd_title), gameDndSummary(), onValueBound = { gameDndSummaryView = it }) {
+                startActivity(Intent(this@MainActivity, GameDndSettingsActivity::class.java))
+            })
+            addView(divider())
             addView(valueRow(getString(R.string.action_get_logs), getString(R.string.settings_logs_description)) { showHowToGetLogs() })
         })
     }
@@ -247,6 +252,12 @@ class MainActivity : Activity() {
         val mode = getString(UsbMode.fromWire(ModuleSettings.defaultMode()).displayRes)
         val adb = getString(if (ModuleSettings.defaultAdb()) R.string.settings_adb_on else R.string.settings_adb_off)
         return getString(R.string.settings_default_usb_summary, mode, adb)
+    }
+
+    private fun gameDndSummary(): String = if (ModuleSettings.gameDndEnabled()) {
+        getString(R.string.game_dnd_summary, getString(R.string.game_dnd_enabled), ModuleSettings.gameDndPackages().size)
+    } else {
+        getString(R.string.game_dnd_disabled_summary)
     }
 
     private fun developerFooter(): LinearLayout = LinearLayout(this).apply {
@@ -351,7 +362,10 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (hasResumed) defaultConfigSummaryView?.text = defaultConfigSummary()
+        if (hasResumed) {
+            defaultConfigSummaryView?.text = defaultConfigSummary()
+            gameDndSummaryView?.text = gameDndSummary()
+        }
         hasResumed = true
     }
 }

@@ -20,18 +20,19 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 
 internal fun Context.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
-internal fun View.applySystemBarPadding(includeTop: Boolean = false, includeBottom: Boolean = false) {
+internal fun View.applySystemBarPadding(includeTop: Boolean = false, includeBottom: Boolean = false, includeHorizontal: Boolean = false, includeIme: Boolean = false) {
     val initialLeft = paddingLeft
     val initialTop = paddingTop
     val initialRight = paddingRight
     val initialBottom = paddingBottom
     ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
-        val bars = insets.getInsets(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+        val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+        val bottom = if (includeIme) maxOf(bars.bottom, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom) else bars.bottom
         view.setPadding(
-            initialLeft,
+            initialLeft + if (includeHorizontal) bars.left else 0,
             initialTop + if (includeTop) bars.top else 0,
-            initialRight,
-            initialBottom + if (includeBottom) bars.bottom else 0,
+            initialRight + if (includeHorizontal) bars.right else 0,
+            initialBottom + if (includeBottom) bottom else 0,
         )
         insets
     }

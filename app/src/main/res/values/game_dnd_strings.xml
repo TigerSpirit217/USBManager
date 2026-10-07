@@ -1,0 +1,28 @@
+<resources>
+    <string name="game_dnd_title">游戏免打扰</string>
+    <string name="game_dnd_summary">%1$s · 已选 %2$d 个程序 ›</string>
+    <string name="game_dnd_disabled_summary">未启用 ›</string>
+    <string name="game_dnd_enabled">已启用</string>
+    <string name="game_dnd_disabled">未启用</string>
+    <string name="game_dnd_enable">启用游戏免打扰</string>
+    <string name="game_dnd_description">插入数据线时，若所选程序正在前台显示，则不弹出 USB 选择窗口，也不显示选择通知。仅在屏幕亮起且已解锁时生效；后台运行的程序不会触发。设置将在下次连接时生效。</string>
+    <string name="game_dnd_action_title">免打扰时的 USB 行为</string>
+    <string name="game_dnd_charging">仅充电（推荐）</string>
+    <string name="game_dnd_default">使用默认配置</string>
+    <string name="game_dnd_risk_title">使用默认配置的风险</string>
+    <string name="game_dnd_default_risk">风险提示：直接应用默认配置不会弹窗确认，也不等待电脑识别，可能自动开放文件传输、网络共享或 USB 调试。请仅连接可信电脑，并检查默认配置。</string>
+    <string name="game_dnd_apps_title">选择免打扰程序</string>
+    <string name="game_dnd_apps_count">已选 %1$d 个程序</string>
+    <string name="game_dnd_picker_title">选择程序</string>
+    <string name="game_dnd_search_action">搜索</string>
+    <string name="game_dnd_close_search">关闭搜索</string>
+    <string name="game_dnd_more">更多选项</string>
+    <string name="game_dnd_apps_hint">按应用名称或包名搜索并勾选程序，点击保存生效。未选择任何程序时不会触发免打扰。免打扰优先于电脑识别与记忆。</string>
+    <string name="game_dnd_search">搜索应用名称或包名</string>
+    <string name="game_dnd_loading">正在获取设备已安装的应用…</string>
+    <string name="game_dnd_show_system">显示系统应用</string>
+    <string name="game_dnd_no_apps">没有符合条件的应用，可清空搜索或开启“显示系统应用”。</string>
+    <string name="game_dnd_load_failed">无法获取应用。请确认模块已在 LSPosed 的 system 作用域启用，并在更新模块后重启手机，再重新进入此页面。</string>
+    <string name="game_dnd_save_count">保存（已选 %1$d 个）</string>
+    <color name="game_dnd_warning">#FFC62828</color>
+</resources>

@@ -23,6 +23,7 @@ object ModuleConstants {
 
     /** Query current USB host / status (debug aid). */
     const val ACTION_QUERY_STATUS = "$MODULE_PACKAGE.action.QUERY_STATUS"
+    const val ACTION_REQUEST_PACKAGE_NAMES = "$MODULE_PACKAGE.action.REQUEST_PACKAGE_NAMES"
 
     /** Sent when the chooser activity is closed (via any path: confirmed / cancelled / dismissed). */
     const val ACTION_CHOOSER_CLOSED = "$MODULE_PACKAGE.action.CHOOSER_CLOSED"

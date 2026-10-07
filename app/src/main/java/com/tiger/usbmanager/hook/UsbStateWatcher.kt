@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.KeyguardManager
+import android.app.ActivityManager
+import android.os.PowerManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -17,6 +19,7 @@ import com.tiger.usbmanager.bridge.HostProviderClient
 import com.tiger.usbmanager.bridge.ModuleSettingsSnapshot
 import com.tiger.usbmanager.bridge.PendingApplyPayload
 import com.tiger.usbmanager.policy.UsbMode
+import com.tiger.usbmanager.policy.GameDndPolicy
 
 /**
  * Higher-level USB event handler. Consumes connect/disconnect events from
@@ -285,6 +288,7 @@ internal class UsbStateWatcher(
             retryAfterAppTransition()
             return
         }
+        if (applyGameDnd(ctx, settings)) return
         if (settings.authEnabled) {
             authTransitionUntilMs = now + AUTH_SESSION_TIMEOUT_MS
             suppressConnectUntilMs = authTransitionUntilMs
@@ -354,6 +358,7 @@ internal class UsbStateWatcher(
         settings: ModuleSettingsSnapshot,
         outcome: UsbAuthRuntime.Outcome,
     ) {
+        if (applyGameDnd(ctx, settings)) return
         clearTransitionRetry()
         val now = System.currentTimeMillis()
         authTransitionUntilMs = now + REENUM_SUPPRESS_MS
@@ -369,6 +374,45 @@ internal class UsbStateWatcher(
         val request = ChooserRequest(settings.defaultMode, settings.defaultAdb)
         if (shouldDeferChooserForLock(ctx, settings)) deferChooserUntilUnlock(ctx, request)
         else launchChooser(ctx, request)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun foregroundPackage(ctx: Context): String? = runCatching {
+        if (isScreenLocked(ctx)) return@runCatching null
+        val power = ctx.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        if (power?.isInteractive != true) return@runCatching null
+        // This call runs with system_server's UID, not the module app's task visibility.
+        val manager = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        manager.getRunningTasks(1).firstOrNull()?.topActivity?.packageName
+    }.onFailure { env.warn("[GAME_DND] foreground lookup failed; keeping normal chooser policy", it) }.getOrNull()
+
+    private fun applyGameDnd(ctx: Context, settings: ModuleSettingsSnapshot): Boolean {
+        if (!settings.gameDndEnabled || settings.gameDndPackages.isEmpty()) return false
+        val foreground = foregroundPackage(ctx)
+        val config = GameDndPolicy.configuration(
+            settings.gameDndEnabled, settings.gameDndPackages, foreground,
+            settings.gameDndUseDefault, settings.defaultMode, settings.defaultAdb,
+        ) ?: return false
+        clearTransitionRetry()
+        cancelDeferredChooser()
+        pendingPollGeneration += 1
+        cancelChooserNotification()
+        dismissChooserActivity()
+        val now = System.currentTimeMillis()
+        // Set guards before applying: switching USB functions can emit disconnects
+        // synchronously, and must not be mistaken for another cable insertion.
+        lastAppliedAtMs = now
+        authTransitionUntilMs = now + REENUM_SUPPRESS_MS
+        suppressConnectUntilMs = authTransitionUntilMs
+        val applied = runCatching { controller.applyConfig(config.mode, config.adb) }
+            .onFailure { env.warn("[GAME_DND] USB configuration failed", it) }.getOrDefault(false)
+        if (!applied) {
+            env.warn("[GAME_DND] configuration failed; falling back to charging with debugging off")
+            runCatching { controller.applyConfig(UsbMode.CHARGING, false) }
+                .onFailure { env.warn("[GAME_DND] charging fallback failed", it) }
+        }
+        env.info("[GAME_DND] foreground=$foreground mode=${config.mode} adb=${config.adb} applied=$applied; chooser suppressed")
+        return true
     }
 
     /**
@@ -525,6 +569,10 @@ internal class UsbStateWatcher(
     }
 
     private fun launchChooser(ctx: Context, request: ChooserRequest) {
+        // Recheck after authentication or lock deferral: the foreground app and
+        // settings may have changed since the initial cable insertion.
+        val settings = runCatching { hostClient.settings() }.getOrNull()
+        if (settings != null && applyGameDnd(ctx, settings)) return
         pendingChooserToken += 1
         val token = pendingChooserToken
         lastChooserNotificationToken = token

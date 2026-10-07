@@ -2,9 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-sdk tools:overrideLibrary="io.github.libxposed.service,io.github.libxposed.service.interfaces" />
-
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <queries>
+        <provider android:authorities="io.github.libxposed.service" />
+    </queries>
 
     <application
         android:name=".UsbManagerApp"
@@ -31,6 +31,9 @@
         <activity
             android:name=".ui.UsbAuthenticationActivity"
             android:exported="false" />
+
+        <activity android:name=".ui.GameDndSettingsActivity" android:exported="false" />
+        <activity android:name=".ui.GameDndAppPickerActivity" android:exported="false" />
 
         <activity
             android:name=".ui.DefaultUsbConfigActivity"

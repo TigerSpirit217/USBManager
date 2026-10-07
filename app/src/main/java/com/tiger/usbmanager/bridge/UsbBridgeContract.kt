@@ -24,6 +24,22 @@ object UsbBridgeContract {
 
     /** Returns module settings needed by system_server (auto-off, defaults). */
     const val METHOD_GET_SETTINGS = "get_settings"
+    const val METHOD_BEGIN_PACKAGE_NAMES = "begin_package_names"
+    const val METHOD_GET_PACKAGE_REQUEST = "get_package_request"
+    const val METHOD_PUBLISH_PACKAGE_NAMES = "publish_package_names"
+    const val METHOD_GET_PACKAGE_NAMES = "get_package_names"
+    const val METHOD_PUBLISH_PACKAGE_APPS = "publish_package_apps"
+    const val METHOD_GET_PACKAGE_APPS = "get_package_apps"
+    const val KEY_PACKAGE_APPS = "package_apps"
+    const val KEY_PACKAGE_PAGE = "package_page"
+    const val PACKAGE_PAGE_SIZE = 16
+    const val KEY_PACKAGE_REQUEST = "package_request"
+    const val KEY_PACKAGE_NAMES = "package_names"
+    const val KEY_PACKAGE_ERROR = "package_error"
+    const val KEY_PACKAGE_READY = "package_ready"
+    const val KEY_GAME_DND_ENABLED = "game_dnd_enabled"
+    const val KEY_GAME_DND_PACKAGES = "game_dnd_packages"
+    const val KEY_GAME_DND_USE_DEFAULT = "game_dnd_use_default"
 
     /** extras = full pending apply payload. */
     const val METHOD_PUT_PENDING_APPLY = "put_pending_apply"

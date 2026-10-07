@@ -14,7 +14,7 @@ data class AuthResult(val status: String, val id: String = "", val label: String
 object RootAuthManager {
     enum class DetectionFailure { ROOT_REQUIRED, UNSUPPORTED }
 
-    data class Paths(val script: String, val apk: String, val nativeLibrary: String)
+    data class Paths(val script: String, val apk: String, val nativeLibrary: String, val appProcess: String)
     data class Detection(
         val supported: Boolean,
         val backend: String = RecognitionSettings.BACKEND_NONE,
@@ -31,7 +31,10 @@ object RootAuthManager {
         script.setReadable(true, true)
         val native = File(context.applicationInfo.nativeLibraryDir, "libusbmanager_auth.so")
         check(native.isFile) { "USB Authenticate native library is unavailable for this CPU" }
-        return Paths(script.absolutePath, context.applicationInfo.sourceDir, native.absolutePath)
+        // The installed library matches the app process, not necessarily the OS default VM.
+        val matchingProcess = "/system/bin/app_process${if (android.os.Process.is64Bit()) "64" else "32"}"
+        val appProcess = matchingProcess.takeIf { File(it).canExecute() } ?: "/system/bin/app_process"
+        return Paths(script.absolutePath, context.applicationInfo.sourceDir, native.absolutePath, appProcess)
     }
 
     fun detect(context: Context): Detection {
@@ -161,7 +164,7 @@ object RootAuthManager {
     }
 
     private fun runRoot(paths: Paths, action: String, mode: String, backend: String, timeoutMs: Long, profile: String = "none"): Result {
-        val command = "sh ${paths.script} $action ${paths.apk} ${paths.nativeLibrary} $mode $backend $profile"
+        val command = "sh ${paths.script} $action ${paths.apk} ${paths.nativeLibrary} $mode $backend $profile ${paths.appProcess}"
         val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
         val output = StringBuilder()
         fun drain(stream: java.io.InputStream) = Thread {

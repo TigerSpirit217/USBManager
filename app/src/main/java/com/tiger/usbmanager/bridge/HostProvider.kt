@@ -2,6 +2,8 @@ package com.tiger.usbmanager.bridge
 
 import android.content.ContentProvider
 import android.content.ContentValues
+import android.content.pm.ApplicationInfo
+import androidx.core.os.BundleCompat
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
@@ -30,6 +32,10 @@ class HostProvider : ContentProvider() {
      *  Volatile so binder thread reads are visible; single slot because there is at
      *  most one chooser live at a time. */
     @Volatile private var pendingApplyJson: String? = null
+    private val packageLock = Any()
+    private var packageRequest = ""
+    private var packageNamesResult: Bundle? = null
+    private val packageApplications = arrayListOf<ApplicationInfo>()
 
     override fun onCreate(): Boolean {
         val ctx = context ?: return false
@@ -48,6 +54,19 @@ class HostProvider : ContentProvider() {
                 return@runCatching null
             }
 
+            // Package names are private to the module UI; only system_server can
+            // publish a snapshot and only the app can begin/read a request.
+            when (method) {
+                UsbBridgeContract.METHOD_BEGIN_PACKAGE_NAMES,
+                UsbBridgeContract.METHOD_GET_PACKAGE_NAMES,
+                UsbBridgeContract.METHOD_GET_PACKAGE_APPS ->
+                    if (callingUid != android.os.Process.myUid()) return@runCatching null
+                UsbBridgeContract.METHOD_GET_PACKAGE_REQUEST,
+                UsbBridgeContract.METHOD_PUBLISH_PACKAGE_NAMES,
+                UsbBridgeContract.METHOD_PUBLISH_PACKAGE_APPS ->
+                    if (callingUid != android.os.Process.SYSTEM_UID) return@runCatching null
+            }
+
             // Mutating operations additionally require the shared BRIDGE_TOKEN.
             when (method) {
                 UsbBridgeContract.METHOD_PUT_PENDING_APPLY,
@@ -55,6 +74,9 @@ class HostProvider : ContentProvider() {
                 UsbBridgeContract.METHOD_START_AUTH,
                 UsbBridgeContract.METHOD_GET_AUTH_RESULT,
                 UsbBridgeContract.METHOD_CANCEL_AUTH,
+                UsbBridgeContract.METHOD_BEGIN_PACKAGE_NAMES,
+                UsbBridgeContract.METHOD_PUBLISH_PACKAGE_NAMES,
+                UsbBridgeContract.METHOD_PUBLISH_PACKAGE_APPS,
                 -> {
                     val tok = extras?.getString(UsbBridgeContract.KEY_BRIDGE_TOKEN)
                     if (tok != ModuleConstants.BRIDGE_TOKEN) {
@@ -65,6 +87,42 @@ class HostProvider : ContentProvider() {
             }
             when (method) {
                 UsbBridgeContract.METHOD_GET_SETTINGS -> handleGetSettings()
+                UsbBridgeContract.METHOD_BEGIN_PACKAGE_NAMES -> synchronized(packageLock) {
+                    val request = extras?.getString(UsbBridgeContract.KEY_PACKAGE_REQUEST).orEmpty()
+                    if (request.isEmpty() || request.length > 64) return@synchronized null
+                    packageRequest = request
+                    packageNamesResult = null
+                    packageApplications.clear()
+                    Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, true) }
+                }
+                UsbBridgeContract.METHOD_GET_PACKAGE_REQUEST -> synchronized(packageLock) {
+                    Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, arg == packageRequest && packageRequest.isNotEmpty()) }
+                }
+                UsbBridgeContract.METHOD_PUBLISH_PACKAGE_NAMES -> synchronized(packageLock) {
+                    if (extras?.getString(UsbBridgeContract.KEY_PACKAGE_REQUEST) != packageRequest) return@synchronized null
+                    packageNamesResult = Bundle(extras).apply { putBoolean(UsbBridgeContract.KEY_PACKAGE_READY, true) }
+                    Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, true) }
+                }
+                UsbBridgeContract.METHOD_GET_PACKAGE_NAMES -> synchronized(packageLock) {
+                    if (arg == packageRequest) packageNamesResult?.let(::Bundle) ?: Bundle() else null
+                }
+                UsbBridgeContract.METHOD_PUBLISH_PACKAGE_APPS -> synchronized(packageLock) {
+                    if (extras == null || extras.getString(UsbBridgeContract.KEY_PACKAGE_REQUEST) != packageRequest)
+                        return@synchronized null
+                    val apps = BundleCompat.getParcelableArrayList(extras, UsbBridgeContract.KEY_PACKAGE_APPS, ApplicationInfo::class.java)
+                        ?: return@synchronized null
+                    if (apps.size > UsbBridgeContract.PACKAGE_PAGE_SIZE) return@synchronized null
+                    packageApplications.addAll(apps)
+                    Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, true) }
+                }
+                UsbBridgeContract.METHOD_GET_PACKAGE_APPS -> synchronized(packageLock) {
+                    if (arg != packageRequest) return@synchronized null
+                    val start = (extras?.getInt(UsbBridgeContract.KEY_PACKAGE_PAGE, 0) ?: 0).toLong() * UsbBridgeContract.PACKAGE_PAGE_SIZE
+                    val page = if (start < 0 || start >= packageApplications.size) arrayListOf()
+                        else ArrayList(packageApplications.subList(start.toInt(),
+                            minOf(start.toInt() + UsbBridgeContract.PACKAGE_PAGE_SIZE, packageApplications.size)))
+                    Bundle().apply { putParcelableArrayList(UsbBridgeContract.KEY_PACKAGE_APPS, page) }
+                }
                 UsbBridgeContract.METHOD_PUT_PENDING_APPLY -> handlePutPendingApply(extras)
                 UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY -> handleGetAndClearPendingApply()
                 UsbBridgeContract.METHOD_START_AUTH -> handleStartAuth(extras)
@@ -146,6 +204,9 @@ class HostProvider : ContentProvider() {
     private fun handleGetSettings(): Bundle {
         return Bundle().apply {
             putString(UsbBridgeContract.KEY_MODE, ModuleSettings.defaultMode())
+            putBoolean(UsbBridgeContract.KEY_GAME_DND_ENABLED, ModuleSettings.gameDndEnabled())
+            putStringArrayList(UsbBridgeContract.KEY_GAME_DND_PACKAGES, ArrayList(ModuleSettings.gameDndPackages()))
+            putBoolean(UsbBridgeContract.KEY_GAME_DND_USE_DEFAULT, ModuleSettings.gameDndUsesDefault())
             putBoolean(UsbBridgeContract.KEY_ADB, ModuleSettings.defaultAdb())
             putBoolean(
                 UsbBridgeContract.KEY_DISCONNECT_AUTO_OFF,

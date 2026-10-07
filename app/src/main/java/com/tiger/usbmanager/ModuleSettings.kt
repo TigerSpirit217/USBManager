@@ -20,6 +20,10 @@ object ModuleSettings {
      *  the chooser is deferred until the user unlocks. */
     const val KEY_CHOOSER_WHILE_LOCKED = "chooser_while_locked"
     const val KEY_FIRST_LAUNCH_DONE = "first_launch_done"
+    const val KEY_GAME_DND_ENABLED = "game_dnd_enabled"
+    const val KEY_GAME_DND_PACKAGES = "game_dnd_packages"
+    const val KEY_GAME_DND_ACTION = "game_dnd_action"
+    const val KEY_GAME_DND_SHOW_SYSTEM_APPS = "game_dnd_show_system_apps"
 
     private lateinit var prefsBacking: SharedPreferences
 
@@ -49,6 +53,10 @@ object ModuleSettings {
         prefs().getBoolean(KEY_CHOOSER_WHILE_LOCKED, false)
 
     fun isFirstLaunchDone(): Boolean = prefs().getBoolean(KEY_FIRST_LAUNCH_DONE, false)
+
+    fun gameDndEnabled(): Boolean = prefs().getBoolean(KEY_GAME_DND_ENABLED, false)
+    fun gameDndPackages(): Set<String> = prefs().getStringSet(KEY_GAME_DND_PACKAGES, emptySet()).orEmpty().toSet()
+    fun gameDndUsesDefault(): Boolean = prefs().getString(KEY_GAME_DND_ACTION, "charging") == "default"
 
     fun markFirstLaunchDone() {
         prefs().edit().putBoolean(KEY_FIRST_LAUNCH_DONE, true).apply()

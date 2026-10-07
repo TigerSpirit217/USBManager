@@ -1,0 +1,27 @@
+<resources>
+    <string name="game_dnd_title">Game Do Not Disturb</string>
+    <string name="game_dnd_summary">%1$s · Selected apps: %2$d ›</string>
+    <string name="game_dnd_disabled_summary">Disabled ›</string>
+    <string name="game_dnd_enabled">Enabled</string>
+    <string name="game_dnd_disabled">Disabled</string>
+    <string name="game_dnd_enable">Enable Game Do Not Disturb</string>
+    <string name="game_dnd_description">When a selected app is in the foreground at USB connection, suppress the USB chooser and its notification. Applies while the screen is on and unlocked; background apps do not trigger it. Changes take effect on the next connection.</string>
+    <string name="game_dnd_action_title">USB behavior during Do Not Disturb</string>
+    <string name="game_dnd_charging">Charge only (recommended)</string>
+    <string name="game_dnd_default">Use default configuration</string>
+    <string name="game_dnd_risk_title">Default configuration risks</string>
+    <string name="game_dnd_default_risk">Warning: applying the default configuration skips confirmation and computer recognition. It may automatically enable file transfer, tethering, or USB debugging. Only connect trusted computers and check your default configuration.</string>
+    <string name="game_dnd_apps_title">Choose apps for Do Not Disturb</string>
+    <string name="game_dnd_apps_count">Selected apps: %1$d</string>
+    <string name="game_dnd_picker_title">Choose apps</string>
+    <string name="game_dnd_search_action">Search</string>
+    <string name="game_dnd_close_search">Close search</string>
+    <string name="game_dnd_more">More options</string>
+    <string name="game_dnd_apps_hint">Search app names or package names, select apps, and tap Save. Selecting no apps disables suppression. Do Not Disturb takes priority over computer recognition and memory.</string>
+    <string name="game_dnd_search">Search app names or package names</string>
+    <string name="game_dnd_loading">Loading installed apps…</string>
+    <string name="game_dnd_show_system">Show system apps</string>
+    <string name="game_dnd_no_apps">No matching apps. Clear the search or enable “Show system apps”.</string>
+    <string name="game_dnd_load_failed">Unable to load apps. Enable the module for system in LSPosed, reboot after updating it, then reopen this page.</string>
+    <string name="game_dnd_save_count">Save (selected: %1$d)</string>
+</resources>

@@ -2,6 +2,15 @@ plugins {
     alias(libs.plugins.androidApplication)
 }
 
+// Build a universal APK by default; use -PtargetAbis=arm64-v8a for a single ABI.
+val supportedAbis = listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64", "riscv64")
+val targetAbis = providers.gradleProperty("targetAbis")
+    .map { value -> value.split(',').map(String::trim).distinct() }
+    .getOrElse(supportedAbis)
+require(targetAbis.isNotEmpty() && targetAbis.all { it in supportedAbis }) {
+    "Invalid targetAbis: ${targetAbis.joinToString()}. Supported ABIs: ${supportedAbis.joinToString()}"
+}
+
 android {
     namespace = "com.tiger.usbmanager"
     compileSdk = 37
@@ -10,12 +19,13 @@ android {
 
     defaultConfig {
         applicationId = "com.tiger.usbmanager"
+        // libxposed API/service 102 and the authentication backend require API 26.
         minSdk = 26
         targetSdk = 37
-        versionCode = 6
-        versionName = "6"
+        versionCode = 7
+        versionName = "7"
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += targetAbis
         }
         externalNativeBuild {
             ndkBuild {
@@ -81,6 +91,7 @@ configurations.all {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation(platform(libs.kotlin.bom))
     implementation(libs.core)
     compileOnly(libs.libxposed.api)

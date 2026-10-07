@@ -67,6 +67,9 @@ class HostProviderClient(context: Context) {
             authEnabled = result?.getBoolean(UsbBridgeContract.KEY_AUTH_ENABLED, false) ?: false,
             authBackend = result?.getString(UsbBridgeContract.KEY_AUTH_BACKEND).orEmpty(),
             authTransitionUntilMs = result?.getLong(UsbBridgeContract.KEY_AUTH_TRANSITION_UNTIL, 0L) ?: 0L,
+            gameDndEnabled = result?.getBoolean(UsbBridgeContract.KEY_GAME_DND_ENABLED, false) ?: false,
+            gameDndPackages = result?.getStringArrayList(UsbBridgeContract.KEY_GAME_DND_PACKAGES)?.toSet().orEmpty(),
+            gameDndUseDefault = result?.getBoolean(UsbBridgeContract.KEY_GAME_DND_USE_DEFAULT, false) ?: false,
         )
         Log.i(TAG, "[CLIENT] settings → $snap")
         return snap
@@ -136,4 +139,7 @@ data class ModuleSettingsSnapshot(
     val authEnabled: Boolean = false,
     val authBackend: String = "",
     val authTransitionUntilMs: Long = 0L,
+    val gameDndEnabled: Boolean = false,
+    val gameDndPackages: Set<String> = emptySet(),
+    val gameDndUseDefault: Boolean = false,
 )

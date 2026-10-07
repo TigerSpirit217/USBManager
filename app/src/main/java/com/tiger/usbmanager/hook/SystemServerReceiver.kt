@@ -32,6 +32,9 @@ internal class SystemServerReceiver(
     /** Optional reference to the watcher (for chooser-closed signals). */
     private val watcher: UsbStateWatcher?,
 ) {
+    private val packageWorker = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+        Thread(task, "usb-package-catalog").apply { isDaemon = true }
+    }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -40,7 +43,11 @@ internal class SystemServerReceiver(
                 intent.getStringExtra("android.intent.extra.PACKAGE_NAME")
             }.getOrNull()
             val callingUid = runCatching {
-                android.os.Binder.getCallingUidOrThrow()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    android.os.Binder.getCallingUidOrThrow()
+                } else {
+                    android.os.Binder.getCallingUid()
+                }
             }.getOrNull() ?: android.os.Process.myUid()
 
             // ----- UID authorization (authoritative gate). -----
@@ -70,6 +77,7 @@ internal class SystemServerReceiver(
                     ModuleConstants.ACTION_APPLY_USB_CONFIG,
                     ModuleConstants.ACTION_CHOOSER_CLOSED,
                     ModuleConstants.ACTION_QUERY_STATUS,
+                    ModuleConstants.ACTION_REQUEST_PACKAGE_NAMES,
                 )
             ) {
                 val receivedToken = intent.getStringExtra(ModuleConstants.EXTRA_BRIDGE_TOKEN)
@@ -88,6 +96,13 @@ internal class SystemServerReceiver(
                 ModuleConstants.ACTION_APPLY_USB_CONFIG -> handleApply(intent)
                 ModuleConstants.ACTION_CHOOSER_CLOSED -> handleChooserClosed(intent)
                 ModuleConstants.ACTION_QUERY_STATUS -> env.info("[RX] QUERY_STATUS ping received (no-op)")
+                ModuleConstants.ACTION_REQUEST_PACKAGE_NAMES -> {
+                    val request = intent.getStringExtra(com.tiger.usbmanager.bridge.UsbBridgeContract.KEY_PACKAGE_REQUEST).orEmpty()
+                    packageWorker.execute {
+                        runCatching { SystemPackageCatalog.publish(env, context, request) }
+                            .onFailure { env.warn("[GAME_DND] package request failed", it) }
+                    }
+                }
                 ACTION_USB_STATE -> handleUsbStateBroadcast(intent)
                 else -> env.warn("[RX] Ignoring unknown action $action")
             }
@@ -102,6 +117,7 @@ internal class SystemServerReceiver(
             addAction(ModuleConstants.ACTION_APPLY_USB_CONFIG)
             addAction(ModuleConstants.ACTION_CHOOSER_CLOSED)
             addAction(ModuleConstants.ACTION_QUERY_STATUS)
+            addAction(ModuleConstants.ACTION_REQUEST_PACKAGE_NAMES)
             priority = IntentFilter.SYSTEM_HIGH_PRIORITY
         }
         env.info("[RX] Registering bridge receiver actions=${bridgeFilter.actionsIterator().asSequence().toList()} ctxPkg=${context.packageName} uid=${android.os.Process.myUid()} (token-gated, no perm)")
