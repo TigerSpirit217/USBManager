@@ -1,6 +1,5 @@
 package com.tiger.usbmanager.ui
 
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -23,7 +22,7 @@ import com.tiger.usbmanager.ModuleSettings
 import com.tiger.usbmanager.R
 import com.tiger.usbmanager.policy.UsbMode
 
-class MainActivity : Activity() {
+class MainActivity : LocalizedActivity() {
     private lateinit var activationStatusContainer: LinearLayout
     private var defaultConfigSummaryView: TextView? = null
     private var gameDndSummaryView: TextView? = null
@@ -47,7 +46,8 @@ class MainActivity : Activity() {
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
                 setTextColor(getColor(R.color.text_primary))
             })
-            val versionName = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrDefault("unknown")
+            val versionName = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
+                ?: getString(R.string.version_unknown)
             addView(TextView(this@MainActivity).apply {
                 text = getString(R.string.intro_module_info, versionName)
                 textSize = 14f
@@ -141,7 +141,8 @@ class MainActivity : Activity() {
         val handler = Handler(Looper.getMainLooper())
         Thread {
             val status = runCatching { ModuleActivationCheck.check(this) }.getOrElse {
-                ModuleActivationCheck.Status.Unknown(getString(R.string.activate_check_error, it.message))
+                android.util.Log.w("USBManager", "Activation check failed", it)
+                ModuleActivationCheck.Status.Unknown(getString(R.string.activate_check_error))
             }
             handler.post { renderActivationStatus(status) }
         }.apply { name = "usb-activation-check"; isDaemon = true }.start()

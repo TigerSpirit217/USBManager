@@ -3,6 +3,8 @@ package com.tiger.usbmanager.hook
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.LocaleManager
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.KeyguardManager
 import android.app.ActivityManager
@@ -10,11 +12,13 @@ import android.os.PowerManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import com.tiger.usbmanager.ModuleConstants
 import com.tiger.usbmanager.R
+import com.tiger.usbmanager.withDisplayLanguage
 import com.tiger.usbmanager.bridge.HostProviderClient
 import com.tiger.usbmanager.bridge.ModuleSettingsSnapshot
 import com.tiger.usbmanager.bridge.PendingApplyPayload
@@ -74,10 +78,6 @@ internal class UsbStateWatcher(
     /** Token of the last chooser notification posted via FullScreenIntent, so we can
      *  cancel it (and its lingering full-screen intent) when the cable is unplugged. */
     @Volatile private var lastChooserNotificationToken: Int = 0
-    @Volatile private var notificationChannelCreated = false
-    /** Lazily-resolved module package Context, used to localize the notification text
-     *  from the module APK resources while running inside system_server. */
-    @Volatile private var moduleContext: Context? = null
     /** Token of the currently-pending debounced handleConnect runnable, used to
      *  cancel it when a DISCONNECT event arrives before the debounce window
      *  elapses — this is the root cause of "sometimes unplugging a cable still
@@ -605,7 +605,8 @@ internal class UsbStateWatcher(
             // ---- Path 2: high-priority Notification + fullScreenIntent.
             env.info("[WATCHER] Falling back to Notification FullScreenIntent token=$token")
             runCatching {
-                ensureNotificationChannel(ctx)
+                val strings = moduleNotificationContext(ctx)
+                ensureNotificationChannel(ctx, strings)
                 val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 val pi = PendingIntent.getActivity(
                     ctx,
@@ -613,8 +614,8 @@ internal class UsbStateWatcher(
                     intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )
-                val title = moduleString(ctx, R.string.chooser_notification_title, "USB connected")
-                val text = moduleString(ctx, R.string.chooser_notification_text, "Tap to choose USB mode and ADB.")
+                val title = strings.getString(R.string.chooser_notification_title)
+                val text = strings.getString(R.string.chooser_notification_text)
                 val notif: Notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     Notification.Builder(ctx, CHANNEL_ID)
                         .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -656,31 +657,24 @@ internal class UsbStateWatcher(
         startPendingApplyPoll(token)
     }
 
-    private fun ensureNotificationChannel(ctx: Context) {
-        if (notificationChannelCreated) return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            notificationChannelCreated = true
-            return
-        }
+    private fun ensureNotificationChannel(ctx: Context, strings: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         runCatching {
             val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val existing = nm.getNotificationChannel(CHANNEL_ID)
-            if (existing != null) {
-                notificationChannelCreated = true
-                return
-            }
-            val channel = NotificationChannel(
+            val channel = existing ?: NotificationChannel(
                 CHANNEL_ID,
-                moduleString(ctx, R.string.notification_channel_name, "USB chooser"),
+                strings.getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = moduleString(ctx, R.string.notification_channel_desc, "Shows a chooser when USB is plugged in")
                 enableLights(false)
                 enableVibration(false)
                 setShowBadge(true)
             }
+            // Refresh labels after language changes; preserve the user's channel settings.
+            channel.name = strings.getString(R.string.notification_channel_name)
+            channel.description = strings.getString(R.string.notification_channel_desc)
             nm.createNotificationChannel(channel)
-            notificationChannelCreated = true
             env.info("[WATCHER] Notification channel $CHANNEL_ID created OK")
         }.onFailure {
             env.warn("[WATCHER] Could not create notification channel", it)
@@ -690,15 +684,21 @@ internal class UsbStateWatcher(
     /**
      * Resolves a module-APK string resource while running inside system_server. The
      * system_server Context's resources map to the framework, not our APK, so we must
-     * open a package-scoped Context for the module to read its own strings. Falls back
-     * to [fallback] (English) when the module Context can't be created.
+     * open a package-scoped Context for the module to read its own strings. Resolve
+     * it for each notification so language changes do not leave cached English text.
      */
-    private fun moduleString(ctx: Context, resId: Int, fallback: String): String {
-        val mc = moduleContext ?: runCatching {
-            ctx.createPackageContext(ModuleConstants.MODULE_PACKAGE, 0).also { moduleContext = it }
-        }.getOrNull()
-        if (mc == null) return fallback
-        return runCatching { mc.getString(resId) }.getOrElse { fallback }
+    @SuppressLint("MissingPermission") // Runs as system_server, which can read app locales.
+    private fun moduleNotificationContext(ctx: Context): Context {
+        val configuration = Configuration(ctx.resources.configuration)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            runCatching {
+                ctx.getSystemService(LocaleManager::class.java)
+                    .getApplicationLocales(ModuleConstants.MODULE_PACKAGE)
+            }.onSuccess { locales ->
+                if (!locales.isEmpty) configuration.setLocales(locales)
+            }.onFailure { env.warn("[WATCHER] Could not read module language", it) }
+        }
+        return ctx.createPackageContext(ModuleConstants.MODULE_PACKAGE, 0).withDisplayLanguage(configuration)
     }
 
     // ---- Pending-apply mailbox polling (UsbConfigSender path 2 fallback) ----

@@ -1,6 +1,5 @@
 package com.tiger.usbmanager.ui
 
-import android.app.Activity
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -34,7 +33,7 @@ import com.tiger.usbmanager.bridge.CatalogApp
 import java.text.Collator
 import java.util.concurrent.Executors
 
-class GameDndAppPickerActivity : Activity() {
+class GameDndAppPickerActivity : LocalizedActivity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val iconWorker = Executors.newSingleThreadExecutor()
     private val iconCache = LruCache<String, Bitmap>(48)

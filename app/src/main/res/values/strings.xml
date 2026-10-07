@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="zh">
     <string name="app_name">USB 管理器</string>
     <string name="xposed_description">基于 libxposed API 102 的 USB 管理模块，Hook system_server 实现连接电脑时弹窗选择 USB 模式与 ADB 开关。</string>
 
@@ -55,11 +55,12 @@
     <string name="auth_pair_failed">配对未完成，请检查电脑后端、数据线和 root 授权后重试。</string>
     <string name="auth_saved_title">已保存的电脑</string>
     <string name="auth_saved_empty">尚未保存电脑。</string>
-    <string name="auth_saved_item">%1$s\n最近识别：%2$s\nID：%3$s…</string>
+    <string name="auth_saved_details">最近识别：%1$s\nID：%2$s…\n%3$s</string>
     <string name="auth_delete">移除</string>
     <string name="auth_delete_confirm">移除已保存的电脑“%1$s”？移除后需再次在手机上确认配对。</string>
     <string name="activate_checking">正在检测模块激活状态…</string>
-    <string name="activate_check_error">检测异常：%1$s</string>
+    <string name="activate_check_error">检测异常，请重新检测；详细原因可在模块日志中查看。</string>
+    <string name="version_unknown">未知</string>
     <string name="activate_state_active">✅ 模块已激活 (Hook 正常)</string>
     <string name="activate_state_inactive">❌ 模块未生效（LSPosed 未注入 system_server）</string>
     <string name="activate_state_unknown">⚠️ 模块状态不明</string>
@@ -116,7 +117,7 @@
     <string name="auth_config_missing">未设置配置</string>
     <string name="auth_adb_label">ADB</string>
     <string name="auth_saved_config">%1$s%2$s</string>
-    <string name="auth_adb_enabled"> + ADB</string>
+    <string name="auth_adb_enabled">" + ADB"</string>
     <string name="auth_experimental_badge">实验性</string>
     <string name="settings_status_section">运行状态</string>
     <string name="settings_logs_description">查看如何在 LSPosed 中获取模块日志</string>

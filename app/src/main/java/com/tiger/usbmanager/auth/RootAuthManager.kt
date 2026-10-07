@@ -26,9 +26,9 @@ object RootAuthManager {
     )
 
     private fun prepare(context: Context): Paths {
-        val installed = checkNotNull(SchemeStore.current(context)) { "Import a recognition scheme first" }
-        check(android.os.Build.VERSION.SDK_INT >= installed.manifest.minSdk) { "Unsupported Android version" }
-        val abi = checkNotNull(SchemeStore.selectAbi(installed.manifest)) { "Unsupported scheme architecture" }
+        val installed = SchemeStore.current(context) ?: throw SchemeException(SchemeError.SCHEME_REQUIRED)
+        schemeRequire(android.os.Build.VERSION.SDK_INT >= installed.manifest.minSdk, SchemeError.MIN_SDK_REQUIRED, installed.manifest.minSdk)
+        val abi = SchemeStore.selectAbi(installed.manifest) ?: throw SchemeException(SchemeError.UNSUPPORTED_DEVICE)
         val is64Bit = when (abi) {
             "any" -> android.os.Process.is64Bit()
             "armeabi-v7a", "x86" -> false
@@ -38,7 +38,7 @@ object RootAuthManager {
         val appProcess = when {
             File(matchingProcess).canExecute() -> matchingProcess
             is64Bit == android.os.Process.is64Bit() -> "/system/bin/app_process"
-            else -> error("The scheme requires a ${if (is64Bit) 64 else 32}-bit Android runtime")
+            else -> throw SchemeException(SchemeError.RUNTIME_REQUIRED, if (is64Bit) 64 else 32)
         }
         return Paths(File(installed.directory, "entry.sh").absolutePath,
             "/data/adb/usbmanager-schemes/${installed.manifest.storageId}", abi, appProcess)
@@ -147,7 +147,7 @@ object RootAuthManager {
         schemeFilesLock.writeLock().withLock {
             val restoreNeeded = RecognitionSettings.hasExecutedScheme(context)
             RecognitionSettings.setEnabled(context, false)
-            if (restoreNeeded) check(restore(context)) { "Cannot restore the current scheme; import was cancelled" }
+            if (restoreNeeded) schemeRequire(restore(context), SchemeError.RESTORE_IMPORT_FAILED)
             SchemeStore.activate(context, candidate)
             RecognitionSettings.clearTransition(context)
         }
@@ -158,7 +158,7 @@ object RootAuthManager {
         schemeFilesLock.writeLock().withLock {
             val restoreNeeded = RecognitionSettings.hasExecutedScheme(context)
             RecognitionSettings.setEnabled(context, false)
-            if (restoreNeeded) check(restore(context)) { "Cannot restore the current scheme; removal was cancelled" }
+            if (restoreNeeded) schemeRequire(restore(context), SchemeError.RESTORE_REMOVE_FAILED)
             SchemeStore.remove(context)
             RecognitionSettings.clearTransition(context)
         }

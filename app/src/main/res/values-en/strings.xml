@@ -55,11 +55,12 @@
     <string name="auth_pair_failed">Pairing did not complete. Check the Windows companion, cable and root access, then retry.</string>
     <string name="auth_saved_title">Saved computers</string>
     <string name="auth_saved_empty">No computers saved yet.</string>
-    <string name="auth_saved_item">%1$s\nLast seen: %2$s\nID: %3$s…</string>
+    <string name="auth_saved_details">Last seen: %1$s\nID: %2$s…\n%3$s</string>
     <string name="auth_delete">Remove</string>
     <string name="auth_delete_confirm">Remove “%1$s”? Pairing will require phone confirmation again.</string>
     <string name="activate_checking">Checking module activation…</string>
-    <string name="activate_check_error">Check failed: %1$s</string>
+    <string name="activate_check_error">Check failed. Try again; details are available in the module log.</string>
+    <string name="version_unknown">Unknown</string>
     <string name="activate_state_active">✅ Module active (hooks OK)</string>
     <string name="activate_state_inactive">❌ Module inactive (LSPosed did not inject system_server)</string>
     <string name="activate_state_unknown">⚠️ Module status unknown</string>
@@ -116,7 +117,7 @@
     <string name="auth_config_missing">Configuration not set</string>
     <string name="auth_adb_label">ADB</string>
     <string name="auth_saved_config">%1$s%2$s</string>
-    <string name="auth_adb_enabled"> + ADB</string>
+    <string name="auth_adb_enabled">" + ADB"</string>
     <string name="auth_experimental_badge">Experimental</string>
     <string name="settings_status_section">Status</string>
     <string name="settings_logs_description">Learn how to find module logs in LSPosed</string>

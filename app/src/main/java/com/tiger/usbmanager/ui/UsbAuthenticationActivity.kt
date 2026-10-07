@@ -1,6 +1,5 @@
 package com.tiger.usbmanager.ui
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.text.InputFilter
@@ -25,11 +24,13 @@ import com.tiger.usbmanager.auth.KnownComputer
 import com.tiger.usbmanager.auth.RecognitionSettings
 import com.tiger.usbmanager.auth.RootAuthManager
 import com.tiger.usbmanager.auth.SchemeStore
+import com.tiger.usbmanager.auth.SchemeError
+import com.tiger.usbmanager.auth.SchemeException
 import com.tiger.usbmanager.policy.UsbMode
 import java.text.DateFormat
 import java.util.Date
 
-class UsbAuthenticationActivity : Activity() {
+class UsbAuthenticationActivity : LocalizedActivity() {
     private lateinit var content: LinearLayout
     private var settingsCardView: MaterialCardView? = null
     private var transitionRow: LinearLayout? = null
@@ -118,7 +119,8 @@ class UsbAuthenticationActivity : Activity() {
             })
             if (installed != null) {
                 addView(TextView(context).apply {
-                    text = "${installed.manifest.version} · ${installed.manifest.author}\n${installed.manifest.description}"
+                    text = getString(R.string.auth_scheme_details, installed.manifest.version,
+                        installed.manifest.author, installed.manifest.description)
                     textSize = 12f
                     setTextColor(getColor(R.color.text_secondary))
                     setPadding(0, dp(5), 0, dp(8))
@@ -152,7 +154,7 @@ class UsbAuthenticationActivity : Activity() {
         Thread {
             val candidate = runCatching {
                 appContext.contentResolver.openInputStream(uri)?.use { SchemeStore.prepare(appContext, it) }
-                    ?: error("Cannot open package")
+                    ?: throw SchemeException(SchemeError.OPEN_FAILED)
             }
             runOnUiThread {
                 if (isDestroyed || isFinishing) {
@@ -160,7 +162,7 @@ class UsbAuthenticationActivity : Activity() {
                     return@runOnUiThread
                 }
                 candidate.onSuccess { confirmImport(it) }.onFailure {
-                    render(getString(R.string.auth_scheme_error, it.message.orEmpty()))
+                    render(schemeErrorText(it))
                 }
             }
         }.apply { name = "usb-scheme-import"; start() }
@@ -182,7 +184,7 @@ class UsbAuthenticationActivity : Activity() {
                     candidate.directory.deleteRecursively()
                     runOnUiThread {
                         if (!isDestroyed && !isFinishing) render(if (result.isSuccess) getString(R.string.auth_scheme_imported)
-                            else getString(R.string.auth_scheme_error, result.exceptionOrNull()?.message.orEmpty()))
+                            else schemeErrorText(result.exceptionOrNull()))
                     }
                 }.apply { name = "usb-scheme-install"; start() }
             }
@@ -209,7 +211,7 @@ class UsbAuthenticationActivity : Activity() {
                     val result = runCatching { RootAuthManager.removeScheme(appContext) }
                     runOnUiThread {
                         if (!isDestroyed && !isFinishing) render(if (result.isSuccess) null
-                            else getString(R.string.auth_scheme_error, result.exceptionOrNull()?.message.orEmpty()))
+                            else schemeErrorText(result.exceptionOrNull()))
                     }
                 }.start()
             }.show()
@@ -357,9 +359,12 @@ class UsbAuthenticationActivity : Activity() {
                 text = computer.label; textSize = 16f; setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(getColor(R.color.text_primary))
             })
             addView(TextView(this@UsbAuthenticationActivity).apply {
-                val details = getString(R.string.auth_saved_item, computer.label, DateFormat.getDateTimeInstance().format(Date(computer.lastSeen)), computer.id.take(12)).substringAfter('\n')
+                val lastSeen = DateFormat.getDateTimeInstance(DateFormat.DEFAULT, DateFormat.DEFAULT,
+                    resources.configuration.locales[0]).format(Date(computer.lastSeen))
                 val mode = computer.mode?.let { getString(it.displayRes) } ?: getString(R.string.auth_config_missing)
-                text = details + "\n" + getString(R.string.auth_saved_config, mode, if (computer.adb) getString(R.string.auth_adb_enabled) else "")
+                val config = getString(R.string.auth_saved_config, mode,
+                    if (computer.adb) getString(R.string.auth_adb_enabled) else "")
+                text = getString(R.string.auth_saved_details, lastSeen, computer.id.take(12), config)
                 textSize = 12f; setTextColor(getColor(R.color.text_secondary)); setPadding(0, dp(5), 0, dp(7))
             })
             addView(LinearLayout(this@UsbAuthenticationActivity).apply {

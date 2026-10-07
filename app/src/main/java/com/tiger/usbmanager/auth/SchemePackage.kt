@@ -1,6 +1,7 @@
 package com.tiger.usbmanager.auth
 
 import com.google.gson.JsonParser
+import com.google.gson.JsonParseException
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
@@ -27,48 +28,58 @@ object SchemePackage {
     private val supportedAbis = setOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64", "riscv64", "any")
 
     fun parseManifest(json: String): SchemeManifest {
-        require(json.toByteArray(Charsets.UTF_8).size <= 64 * 1024) { "Manifest is too large" }
-        val root = JsonParser.parseString(json).asJsonObject
+        schemeRequire(json.toByteArray(Charsets.UTF_8).size <= 64 * 1024, SchemeError.MANIFEST_TOO_LARGE)
+        val element = try {
+            JsonParser.parseString(json)
+        } catch (_: JsonParseException) {
+            throw SchemeException(SchemeError.INVALID_MANIFEST)
+        }
+        schemeRequire(element.isJsonObject, SchemeError.INVALID_MANIFEST)
+        val root = element.asJsonObject
         fun string(key: String, max: Int = 128): String {
             val value = root.get(key)
-            require(value != null && value.isJsonPrimitive && value.asJsonPrimitive.isString) { "Invalid $key" }
-            return value.asString.also { require(it.isNotBlank() && it.length <= max && it.none(Char::isISOControl)) { "Invalid $key" } }
+            schemeRequire(value != null && value.isJsonPrimitive && value.asJsonPrimitive.isString, SchemeError.INVALID_FIELD, key)
+            return value!!.asString.also {
+                schemeRequire(it.isNotBlank() && it.length <= max && it.none(Char::isISOControl), SchemeError.INVALID_FIELD, key)
+            }
         }
         fun integer(key: String): Int {
             val value = root.get(key)
-            require(value != null && value.isJsonPrimitive && value.asJsonPrimitive.isNumber && value.toString().matches(Regex("[0-9]+"))) { "Invalid $key" }
-            return requireNotNull(value.asString.toIntOrNull()) { "Invalid $key" }
+            schemeRequire(value != null && value.isJsonPrimitive && value.asJsonPrimitive.isNumber && value.toString().matches(Regex("[0-9]+")), SchemeError.INVALID_FIELD, key)
+            return value!!.asString.toIntOrNull() ?: throw SchemeException(SchemeError.INVALID_FIELD, key)
         }
-        require(integer("formatVersion") == 1) { "Unsupported scheme format version" }
-        val id = string("id", 64).also { require(identifier.matches(it)) { "Invalid scheme ID" } }
+        schemeRequire(integer("formatVersion") == 1, SchemeError.UNSUPPORTED_FORMAT)
+        val id = string("id", 64).also { schemeRequire(identifier.matches(it), SchemeError.INVALID_ID) }
         val storageId = if (root.has("storageId")) string("storageId", 64) else id
-        require(identifier.matches(storageId)) { "Invalid storage ID" }
-        require(string("entry") == "entry.sh") { "The entry point must be entry.sh" }
-        val minSdk = integer("minSdk").also { require(it in 26..100) { "Invalid minimum SDK" } }
+        schemeRequire(identifier.matches(storageId), SchemeError.INVALID_STORAGE_ID)
+        schemeRequire(string("entry") == "entry.sh", SchemeError.INVALID_ENTRY)
+        val minSdk = integer("minSdk").also { schemeRequire(it in 26..100, SchemeError.INVALID_MIN_SDK) }
+        schemeRequire(root.get("abis")?.isJsonArray == true, SchemeError.INVALID_ABI_LIST)
         val abis = root.getAsJsonArray("abis").map {
-            require(it.isJsonPrimitive && it.asJsonPrimitive.isString) { "Invalid ABI" }
-            it.asString.also { abi -> require(abi in supportedAbis) { "Unsupported ABI: $abi" } }
+            schemeRequire(it.isJsonPrimitive && it.asJsonPrimitive.isString, SchemeError.INVALID_ABI)
+            it.asString.also { abi -> schemeRequire(abi in supportedAbis, SchemeError.UNSUPPORTED_ABI, abi) }
         }
-        require(abis.isNotEmpty() && abis.distinct().size == abis.size && ("any" !in abis || abis.size == 1)) { "Invalid ABI list" }
+        schemeRequire(abis.isNotEmpty() && abis.distinct().size == abis.size && ("any" !in abis || abis.size == 1), SchemeError.INVALID_ABI_LIST)
+        schemeRequire(root.get("files")?.isJsonObject == true, SchemeError.INVALID_HASH)
         val files = root.getAsJsonObject("files").entrySet().associate { (path, hash) ->
             validatePath(path)
-            require(path != "manifest.json" && hash.isJsonPrimitive && hash.asJsonPrimitive.isString && digest.matches(hash.asString)) { "Invalid file hash" }
+            schemeRequire(path != "manifest.json" && hash.isJsonPrimitive && hash.asJsonPrimitive.isString && digest.matches(hash.asString), SchemeError.INVALID_HASH)
             path to hash.asString
         }
-        require(files.size in 1..127 && "entry.sh" in files) { "Missing entry.sh" }
+        schemeRequire(files.size in 1..127 && "entry.sh" in files, SchemeError.MISSING_ENTRY)
         return SchemeManifest(id, string("name"), string("version", 64), string("author"),
             string("description", 2000), minSdk, abis, storageId, files)
     }
 
     fun validatePath(path: String) {
-        require(safePath.matches(path) && !path.startsWith('/') && path.split('/').all {
+        schemeRequire(safePath.matches(path) && !path.startsWith('/') && path.split('/').all {
             it.isNotEmpty() && it != "." && it != ".."
-        }) { "Unsafe package path: $path" }
+        }, SchemeError.UNSAFE_PATH, path)
     }
 
     /** The caller provides an empty staging directory; it is removed if validation fails. */
     fun extract(input: InputStream, directory: File): SchemeManifest {
-        require(directory.isDirectory && directory.list()?.isEmpty() == true) { "Staging directory is not empty" }
+        schemeRequire(directory.isDirectory && directory.list()?.isEmpty() == true, SchemeError.INVALID_STAGING)
         try {
             val names = mutableSetOf<String>()
             val hashes = mutableMapOf<String, String>()
@@ -77,14 +88,14 @@ object SchemePackage {
             ZipInputStream(input).use { zip ->
                 while (true) {
                     val entry = zip.nextEntry ?: break
-                    require(++count <= 256) { "Too many ZIP entries" }
+                    schemeRequire(++count <= 256, SchemeError.TOO_MANY_ENTRIES)
                     val path = entry.name.removeSuffix("/")
                     validatePath(path)
-                    require(names.add(path)) { "Duplicate ZIP path: $path" }
+                    schemeRequire(names.add(path), SchemeError.DUPLICATE_PATH, path)
                     val file = File(directory, path)
-                    require(file.canonicalPath.startsWith(directory.canonicalPath + File.separator)) { "Unsafe ZIP path" }
+                    schemeRequire(file.canonicalPath.startsWith(directory.canonicalPath + File.separator), SchemeError.UNSAFE_PATH, path)
                     if (entry.isDirectory) {
-                        require(file.mkdirs() || file.isDirectory) { "Cannot create directory" }
+                        schemeRequire(file.mkdirs() || file.isDirectory, SchemeError.CREATE_DIRECTORY)
                     } else {
                         file.parentFile!!.mkdirs()
                         val sha = MessageDigest.getInstance("SHA-256")
@@ -95,7 +106,7 @@ object SchemePackage {
                                 val read = zip.read(buffer)
                                 if (read < 0) break
                                 size += read; total += read
-                                require(size <= 32L * 1024 * 1024 && total <= MAX_BYTES && (path != "manifest.json" || size <= 64 * 1024)) { "Package is too large" }
+                                schemeRequire(size <= 32L * 1024 * 1024 && total <= MAX_BYTES && (path != "manifest.json" || size <= 64 * 1024), SchemeError.PACKAGE_TOO_LARGE)
                                 sha.update(buffer, 0, read)
                                 output.write(buffer, 0, read)
                             }
@@ -106,9 +117,9 @@ object SchemePackage {
                 }
             }
             val manifest = parseManifest(File(directory, "manifest.json").readText(Charsets.UTF_8))
-            require(hashes.keys == manifest.files.keys + "manifest.json") { "File list does not match manifest" }
-            require(manifest.files.all { (path, hash) -> hashes[path] == hash }) { "Package checksum mismatch" }
-            require(File(directory, "entry.sh").length() > 0) { "Empty entry point" }
+            schemeRequire(hashes.keys == manifest.files.keys + "manifest.json", SchemeError.FILE_LIST_MISMATCH)
+            schemeRequire(manifest.files.all { (path, hash) -> hashes[path] == hash }, SchemeError.CHECKSUM_MISMATCH)
+            schemeRequire(File(directory, "entry.sh").length() > 0, SchemeError.EMPTY_ENTRY)
             return manifest
         } catch (error: Exception) {
             directory.deleteRecursively()

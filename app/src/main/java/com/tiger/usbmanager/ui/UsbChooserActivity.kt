@@ -27,6 +27,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.tiger.usbmanager.ModuleConstants
 import com.tiger.usbmanager.ModuleSettings
 import com.tiger.usbmanager.R
+import com.tiger.usbmanager.withDisplayLanguage
 import com.tiger.usbmanager.auth.RecognitionSettings
 import com.tiger.usbmanager.bridge.UsbConfigSender
 import com.tiger.usbmanager.policy.UsbMode
@@ -47,6 +48,10 @@ open class UsbChooserActivity : ComponentActivity() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0) == token) closeAnimated("dismissed")
         }
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withDisplayLanguage())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -175,7 +180,8 @@ open class UsbChooserActivity : ComponentActivity() {
                     reportOutcome("confirmed")
                     Toast.makeText(
                         this@UsbChooserActivity,
-                        getString(selectedMode.displayRes) + if (adbSwitch.isChecked) " + ADB" else "",
+                        getString(R.string.auth_saved_config, getString(selectedMode.displayRes),
+                            if (adbSwitch.isChecked) getString(R.string.auth_adb_enabled) else ""),
                         Toast.LENGTH_SHORT,
                     ).show()
                 }

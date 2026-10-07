@@ -9,7 +9,7 @@
         want to debug hooks elsewhere, but the only entry that actually does
         anything useful is "android".
     -->
-    <string-array name="xposed_scope">
+    <string-array name="xposed_scope" translatable="false">
         <item>android</item>
     </string-array>
 </resources>

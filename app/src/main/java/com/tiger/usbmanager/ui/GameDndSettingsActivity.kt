@@ -1,6 +1,5 @@
 package com.tiger.usbmanager.ui
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
@@ -22,7 +21,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.tiger.usbmanager.ModuleSettings
 import com.tiger.usbmanager.R
 
-class GameDndSettingsActivity : Activity() {
+class GameDndSettingsActivity : LocalizedActivity() {
     private lateinit var packagesSummary: TextView
     private lateinit var advancedSettings: LinearLayout
     private lateinit var behaviorGroup: RadioGroup

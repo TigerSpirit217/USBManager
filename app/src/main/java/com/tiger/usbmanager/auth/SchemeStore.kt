@@ -24,8 +24,8 @@ object SchemeStore {
         val directory = File(root(context), "staging-${UUID.randomUUID()}").apply { mkdirs() }
         try {
             val manifest = SchemePackage.extract(input, directory)
-            require(Build.VERSION.SDK_INT >= manifest.minSdk) { "Scheme requires API ${manifest.minSdk}" }
-            require(selectAbi(manifest) != null) { "Scheme does not support this device's architecture or Android version" }
+            schemeRequire(Build.VERSION.SDK_INT >= manifest.minSdk, SchemeError.MIN_SDK_REQUIRED, manifest.minSdk)
+            schemeRequire(selectAbi(manifest) != null, SchemeError.UNSUPPORTED_DEVICE)
             return Candidate(directory, manifest)
         } catch (error: Exception) {
             directory.deleteRecursively()
@@ -52,17 +52,17 @@ object SchemeStore {
         val old = current(context)
         val revision = UUID.randomUUID().toString()
         val directory = File(packageRoot, revision)
-        check(candidate.directory.renameTo(directory)) { "Cannot install scheme" }
+        schemeRequire(candidate.directory.renameTo(directory), SchemeError.INSTALL_FAILED)
         if (!RecognitionSettings.selectScheme(context, revision, candidate.manifest.id)) {
             directory.deleteRecursively()
-            error("Cannot save scheme settings")
+            throw SchemeException(SchemeError.SAVE_FAILED)
         }
         old?.directory?.deleteRecursively()
     }
 
     fun remove(context: Context) {
         val current = current(context)
-        check(RecognitionSettings.selectScheme(context, "", "")) { "Cannot save scheme settings" }
+        schemeRequire(RecognitionSettings.selectScheme(context, "", ""), SchemeError.SAVE_FAILED)
         current?.directory?.deleteRecursively()
     }
 

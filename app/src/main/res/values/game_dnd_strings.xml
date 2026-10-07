@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="zh">
     <string name="game_dnd_title">游戏免打扰</string>
     <string name="game_dnd_summary">%1$s · 已选 %2$d 个程序 ›</string>
     <string name="game_dnd_disabled_summary">未启用 ›</string>
