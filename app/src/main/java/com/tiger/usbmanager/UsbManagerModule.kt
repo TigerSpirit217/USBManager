@@ -17,8 +17,8 @@ import java.lang.reflect.Method
  *
  * NOTE: This class intentionally keeps zero compile-time references to hook classes
  * (SystemServerHooks, UsbDeviceManagerHook, etc.). If any of those classes or their
- * transitive dependencies fail to resolve inside system_server (e.g. missing appcompat
- * / gson classes in the system classloader), a direct `object` reference would turn
+ * transitive dependencies fail to resolve inside system_server (e.g. missing library
+ * classes in the system classloader), a direct `object` reference would turn
  * onSystemServerStarting itself into a NoClassDefFoundError with zero log output.
  * Instead we resolve everything reflectively inside a try/catch, which guarantees the
  * diagnostic "[MODULE] ..." lines always appear in logcat first.

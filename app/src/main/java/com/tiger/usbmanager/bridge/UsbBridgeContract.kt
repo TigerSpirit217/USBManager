@@ -15,11 +15,6 @@ object UsbBridgeContract {
 
     val HOST_URI: Uri = Uri.parse("content://${ModuleConstants.HOST_AUTHORITY}")
 
-    /** Shared Gson used across process boundaries (bridge + provider). A single
-     *  instance avoids the small per-use allocation of constructing Gson repeatedly
-     *  in HotPaths like USB-connect handling. */
-    val GSON: com.google.gson.Gson = com.google.gson.Gson()
-
     // ---- ContentProvider.call() methods ----
 
     /** Returns module settings needed by system_server (auto-off, defaults). */

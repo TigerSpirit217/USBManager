@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.tiger.usbmanager"
-        // libxposed API/service 102 requires API 26. Scheme packages set their own minimum.
+        // libxposed API 102 requires API 26. Scheme packages set their own minimum.
         minSdk = 26
         targetSdk = 37
         versionCode = 7
@@ -25,7 +25,20 @@ android {
     }
 
     buildFeatures {
-        buildConfig = true
+        buildConfig = false
+    }
+
+    androidResources {
+        // Keep the Chinese defaults and the English/Chinese resources used by libraries.
+        localeFilters += listOf(
+            "en", "en-rUS", "en-rGB", "en-rAU", "en-rCA", "en-rIN",
+            "zh", "zh-rCN", "zh-rTW", "zh-rHK",
+        )
+    }
+
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
     packaging {
@@ -66,14 +79,10 @@ configurations.all {
 }
 
 dependencies {
-    testImplementation("junit:junit:4.13.2")
     implementation(platform(libs.kotlin.bom))
     implementation(libs.core)
     compileOnly(libs.libxposed.api)
-    implementation(libs.libxposed.service)
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)
-    implementation(libs.constraintlayout)
-    implementation(libs.gson)
 }

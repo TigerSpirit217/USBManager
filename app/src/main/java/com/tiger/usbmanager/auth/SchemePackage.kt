@@ -1,9 +1,11 @@
 package com.tiger.usbmanager.auth
 
-import com.google.gson.JsonParser
-import com.google.gson.JsonParseException
+import android.util.JsonReader
+import android.util.JsonToken
 import java.io.File
 import java.io.InputStream
+import java.io.IOException
+import java.io.StringReader
 import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
@@ -19,7 +21,7 @@ data class SchemeManifest(
     val files: Map<String, String>,
 )
 
-/** Package parsing is deliberately independent of Android, so malformed imports can be tested. */
+/** The framework JSON reader preserves token types and integer literals without bundling a parser. */
 object SchemePackage {
     const val MAX_BYTES = 64L * 1024 * 1024
     private val identifier = Regex("[a-z0-9][a-z0-9._-]{0,63}")
@@ -29,42 +31,83 @@ object SchemePackage {
 
     fun parseManifest(json: String): SchemeManifest {
         schemeRequire(json.toByteArray(Charsets.UTF_8).size <= 64 * 1024, SchemeError.MANIFEST_TOO_LARGE)
-        val element = try {
-            JsonParser.parseString(json)
-        } catch (_: JsonParseException) {
+        val strings = mutableMapOf<String, String>()
+        val integers = mutableMapOf<String, String>()
+        var rawAbis: List<String>? = null
+        var rawFiles: Map<String, String>? = null
+        try {
+            JsonReader(StringReader(json)).use { reader ->
+                schemeRequire(reader.peek() == JsonToken.BEGIN_OBJECT, SchemeError.INVALID_MANIFEST)
+                reader.beginObject()
+                while (reader.hasNext()) {
+                    val key = reader.nextName()
+                    when (key) {
+                        "id", "name", "version", "author", "description", "entry", "storageId" -> {
+                            schemeRequire(reader.peek() == JsonToken.STRING, SchemeError.INVALID_FIELD, key)
+                            strings[key] = reader.nextString()
+                        }
+                        "formatVersion", "minSdk" -> {
+                            schemeRequire(reader.peek() == JsonToken.NUMBER, SchemeError.INVALID_FIELD, key)
+                            integers[key] = reader.nextString()
+                        }
+                        "abis" -> {
+                            schemeRequire(reader.peek() == JsonToken.BEGIN_ARRAY, SchemeError.INVALID_ABI_LIST)
+                            val values = mutableListOf<String>()
+                            reader.beginArray()
+                            while (reader.hasNext()) {
+                                schemeRequire(reader.peek() == JsonToken.STRING, SchemeError.INVALID_ABI)
+                                values.add(reader.nextString())
+                            }
+                            reader.endArray()
+                            rawAbis = values
+                        }
+                        "files" -> {
+                            schemeRequire(reader.peek() == JsonToken.BEGIN_OBJECT, SchemeError.INVALID_HASH)
+                            val values = mutableMapOf<String, String>()
+                            reader.beginObject()
+                            while (reader.hasNext()) {
+                                val path = reader.nextName()
+                                schemeRequire(reader.peek() == JsonToken.STRING, SchemeError.INVALID_HASH)
+                                values[path] = reader.nextString()
+                            }
+                            reader.endObject()
+                            rawFiles = values
+                        }
+                        else -> reader.skipValue() // Companion information and author-defined metadata.
+                    }
+                }
+                reader.endObject()
+                schemeRequire(reader.peek() == JsonToken.END_DOCUMENT, SchemeError.INVALID_MANIFEST)
+            }
+        } catch (_: IOException) {
+            throw SchemeException(SchemeError.INVALID_MANIFEST)
+        } catch (_: IllegalStateException) {
             throw SchemeException(SchemeError.INVALID_MANIFEST)
         }
-        schemeRequire(element.isJsonObject, SchemeError.INVALID_MANIFEST)
-        val root = element.asJsonObject
         fun string(key: String, max: Int = 128): String {
-            val value = root.get(key)
-            schemeRequire(value != null && value.isJsonPrimitive && value.asJsonPrimitive.isString, SchemeError.INVALID_FIELD, key)
-            return value!!.asString.also {
+            val value = strings[key] ?: throw SchemeException(SchemeError.INVALID_FIELD, key)
+            return value.also {
                 schemeRequire(it.isNotBlank() && it.length <= max && it.none(Char::isISOControl), SchemeError.INVALID_FIELD, key)
             }
         }
         fun integer(key: String): Int {
-            val value = root.get(key)
-            schemeRequire(value != null && value.isJsonPrimitive && value.asJsonPrimitive.isNumber && value.toString().matches(Regex("[0-9]+")), SchemeError.INVALID_FIELD, key)
-            return value!!.asString.toIntOrNull() ?: throw SchemeException(SchemeError.INVALID_FIELD, key)
+            val value = integers[key] ?: throw SchemeException(SchemeError.INVALID_FIELD, key)
+            schemeRequire(value.matches(Regex("[0-9]+")), SchemeError.INVALID_FIELD, key)
+            return value.toIntOrNull() ?: throw SchemeException(SchemeError.INVALID_FIELD, key)
         }
         schemeRequire(integer("formatVersion") == 1, SchemeError.UNSUPPORTED_FORMAT)
         val id = string("id", 64).also { schemeRequire(identifier.matches(it), SchemeError.INVALID_ID) }
-        val storageId = if (root.has("storageId")) string("storageId", 64) else id
+        val storageId = if (strings.containsKey("storageId")) string("storageId", 64) else id
         schemeRequire(identifier.matches(storageId), SchemeError.INVALID_STORAGE_ID)
         schemeRequire(string("entry") == "entry.sh", SchemeError.INVALID_ENTRY)
         val minSdk = integer("minSdk").also { schemeRequire(it in 26..100, SchemeError.INVALID_MIN_SDK) }
-        schemeRequire(root.get("abis")?.isJsonArray == true, SchemeError.INVALID_ABI_LIST)
-        val abis = root.getAsJsonArray("abis").map {
-            schemeRequire(it.isJsonPrimitive && it.asJsonPrimitive.isString, SchemeError.INVALID_ABI)
-            it.asString.also { abi -> schemeRequire(abi in supportedAbis, SchemeError.UNSUPPORTED_ABI, abi) }
-        }
+        val abis = rawAbis ?: throw SchemeException(SchemeError.INVALID_ABI_LIST)
+        abis.forEach { abi -> schemeRequire(abi in supportedAbis, SchemeError.UNSUPPORTED_ABI, abi) }
         schemeRequire(abis.isNotEmpty() && abis.distinct().size == abis.size && ("any" !in abis || abis.size == 1), SchemeError.INVALID_ABI_LIST)
-        schemeRequire(root.get("files")?.isJsonObject == true, SchemeError.INVALID_HASH)
-        val files = root.getAsJsonObject("files").entrySet().associate { (path, hash) ->
+        val files = rawFiles ?: throw SchemeException(SchemeError.INVALID_HASH)
+        files.forEach { (path, hash) ->
             validatePath(path)
-            schemeRequire(path != "manifest.json" && hash.isJsonPrimitive && hash.asJsonPrimitive.isString && digest.matches(hash.asString), SchemeError.INVALID_HASH)
-            path to hash.asString
+            schemeRequire(path != "manifest.json" && digest.matches(hash), SchemeError.INVALID_HASH)
         }
         schemeRequire(files.size in 1..127 && "entry.sh" in files, SchemeError.MISSING_ENTRY)
         return SchemeManifest(id, string("name"), string("version", 64), string("author"),

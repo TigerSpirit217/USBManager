@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import com.tiger.usbmanager.ModuleConstants
 import com.tiger.usbmanager.policy.UsbMode
+import org.json.JSONObject
 
 /**
  * system_server-side client for [HostProvider]. Settings, authentication sessions,
@@ -14,7 +15,6 @@ class HostProviderClient(context: Context) {
 
     private val appContext = context.applicationContext
     private val resolver = appContext.contentResolver
-    private val gson = UsbBridgeContract.GSON
 
     /**
      * Returns the given extras (or a new Bundle) stamped with the shared
@@ -83,7 +83,7 @@ class HostProviderClient(context: Context) {
      * Returns true if the provider acknowledged the write.
      */
     fun putPendingApply(payload: PendingApplyPayload): Boolean {
-        val json = runCatching { gson.toJson(payload) }.getOrDefault(null) ?: return false
+        val json = runCatching { payload.toJson() }.getOrNull() ?: return false
         val extras = tokenFor(Bundle().apply { putString(UsbBridgeContract.KEY_PENDING_JSON, json) })
         val result = runCatching {
             resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_PUT_PENDING_APPLY, null, extras)
@@ -102,7 +102,7 @@ class HostProviderClient(context: Context) {
             resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY, null, tokenFor(null))
         }.onFailure { Log.e(TAG, "[CLIENT] getAndClearPendingApply FAILED", it) }.getOrNull()
         val json = result?.getString(UsbBridgeContract.KEY_RESULT) ?: return null
-        val payload = runCatching { gson.fromJson(json, PendingApplyPayload::class.java) }
+        val payload = runCatching { PendingApplyPayload.fromJson(json) }
             .onFailure { Log.w(TAG, "[CLIENT] getAndClearPendingApply parse FAILED", it) }
             .getOrNull()
         Log.i(TAG, "[CLIENT] getAndClearPendingApply → ${payload != null}")
@@ -127,7 +127,26 @@ data class PendingApplyPayload(
     val adb: Boolean,
     /** Used to reset outcome/confirmed timers in UsbStateWatcher. */
     val confirmed: Boolean = true,
-)
+) {
+    // Explicit wire names preserve compatibility across app/hook versions without
+    // field reflection or keeping the model's Kotlin implementation from R8.
+    fun toJson(): String = JSONObject()
+        .put("modeWire", modeWire)
+        .put("adb", adb)
+        .put("confirmed", confirmed)
+        .toString()
+
+    companion object {
+        fun fromJson(json: String): PendingApplyPayload {
+            val value = JSONObject(json)
+            val mode = value.get("modeWire")
+            val adb = value.opt("adb") ?: false
+            val confirmed = value.opt("confirmed") ?: false
+            require(mode is String && adb is Boolean && confirmed is Boolean)
+            return PendingApplyPayload(mode, adb, confirmed)
+        }
+    }
+}
 
 /** Read-only settings snapshot delivered to system_server. */
 data class ModuleSettingsSnapshot(

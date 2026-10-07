@@ -5,6 +5,7 @@ import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
 import com.tiger.usbmanager.policy.UsbMode
+import java.util.Locale
 
 /**
  * Applies a (USB mode, ADB) configuration to the framework. Runs in system_server
@@ -241,7 +242,8 @@ internal class UsbController(private val env: HookEnv) {
         }
         val map = mutableMapOf<UsbMode, Long>()
         UsbMode.entries.forEach { mode ->
-            val fieldName = "FUNCTION_${mode.name}"
+            val fieldName = if (mode == UsbMode.CHARGING) "FUNCTION_CHARGING"
+                else "FUNCTION_${mode.wireValue.uppercase(Locale.ROOT)}"
             val bit = cls.staticLongFieldOrNull(fieldName)
             if (bit != null && bit != 0L) {
                 map[mode] = bit
@@ -254,7 +256,7 @@ internal class UsbController(private val env: HookEnv) {
         if (map.size < UsbMode.entries.size) {
             UsbMode.entries.forEach { mode ->
                 if (map.containsKey(mode)) return@forEach
-                val alt = "FUNCTION_${mode.wireValue.uppercase()}"
+                val alt = "FUNCTION_${mode.wireValue.uppercase(Locale.ROOT)}"
                 val bit = cls.staticLongFieldOrNull(alt)
                 if (bit != null && bit != 0L) {
                     map[mode] = bit
