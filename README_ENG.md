@@ -11,19 +11,20 @@ An Android system module based on the **LSPosed** framework. When the phone is c
 <details>
 <summary><h2>Experimental Feature (click to expand)</h2></summary>
 
-Computer Recognition and Memory is disabled by default. The main app only provides scheme import, invocation and management. Device checks, USB interfaces, authentication algorithms and the matching Windows backend are supplied by the scheme.
+>Computer Recognition and Memory is disabled by default. The main app only provides scheme import, invocation and management. Device checks, USB interfaces, authentication algorithms and the matching Windows backend are supplied by the scheme.
+>
+>1. Import a trusted author's scheme ZIP, reviewing its author, version and root execution notice.
+>2. Grant root access and run the scheme's device check. Its documentation determines whether a cable or Windows companion is needed.
+>3. After detection succeeds, enable recognition manually and use the matching Windows program. Open the first-time pairing window on the phone.
+>4. After pairing, edit the computer name, USB mode and ADB setting. Later connections apply the configuration returned by the scheme after authentication. Unknown computers, failures and timeouts retain the normal chooser flow.
+>
+>Authors may write their own scheme and Windows backend. Only the app-to-scheme control contract is fixed; the phone-to-Windows protocol is the author's decision. The two former built-in schemes, their authentication runtime and detection code, and the original Windows companion now reside in the **[additional recognition project](https://github.com/TigerSpirit217/USBManagerRecognition)**. The main app contains no built-in recognition implementation.
+>
+>Importing, updating, switching schemes or changing firmware requires detection and manual enabling again. Removal restores USB state, disables recognition and preserves computer records. The reference schemes migrate existing records. Importing a valid package does not establish hardware compatibility.
+>
+>Root is unnecessary when this optional feature is unused; basic USB management is unaffected.
 
-1. Import a trusted author's scheme ZIP, reviewing its author, version and root execution notice.
-2. Grant root access and run the scheme's device check. Its documentation determines whether a cable or Windows companion is needed.
-3. After detection succeeds, enable recognition manually and use the matching Windows program. Open the first-time pairing window on the phone.
-4. After pairing, edit the computer name, USB mode and ADB setting. Later connections apply the configuration returned by the scheme after authentication. Unknown computers, failures and timeouts retain the normal chooser flow.
-
-Authors may write their own scheme and Windows backend. Only the app-to-scheme control contract is fixed; the phone-to-Windows protocol is the author's decision. The two former built-in schemes, their authentication runtime and detection code, and the original Windows companion now reside in the **[additional recognition project](https://github.com/TigerSpirit217/USBManagerRecognition)**. The main app contains no built-in recognition implementation.
-
-Importing, updating, switching schemes or changing firmware requires detection and manual enabling again. Removal restores USB state, disables recognition and preserves computer records. The reference schemes migrate existing records. Importing a valid package does not establish hardware compatibility.
-
-Root is unnecessary when this optional feature is unused; basic USB management is unaffected.
-
+-----
 </details>
 
 ## Features
@@ -62,8 +63,6 @@ Root is unnecessary when this optional feature is unused; basic USB management i
 3. Tap **OK** to apply.
 
 The defaults are Charge only, USB debugging off, ADB off on unplug enabled, and chooser display while locked disabled. These options are configurable on the main page.
-
-Game Do Not Disturb shows USB behavior and app selection only while enabled. Charge only (recommended) also disables USB debugging. Use default configuration applies the main page's default USB mode and debugging state, with a risk confirmation when selected. The app picker displays icons, names and package names. Its top-right search accepts app names and package names; the overflow menu can show system apps, hidden by default. Previously selected apps appear first when entering the picker; the order stays stable during selection.
 
 ## Building
 
