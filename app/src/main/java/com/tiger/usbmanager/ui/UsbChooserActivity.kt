@@ -6,7 +6,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.os.Bundle
+import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
@@ -51,8 +53,8 @@ open class UsbChooserActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (editsDefaultConfiguration) ModuleSettings.init(this)
         token = intent?.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0) ?: 0
-        configureWindow()
         setContentView(R.layout.activity_usb_chooser)
+        configureWindow()
         bindViews()
         applyIntentSelection()
         onBackPressedDispatcher.addCallback(this) { closeAnimated("dismissed") }
@@ -92,14 +94,34 @@ open class UsbChooserActivity : ComponentActivity() {
         playEntranceAnimation()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (closing) return
+        val mode = selectedMode
+        val adbEnabled = adbSwitch.isChecked
+        chooserCard.animate().cancel()
+        // Android selects layout-land for a landscape window. Rebind without closing
+        // the USB session or resetting the user's unconfirmed selection.
+        setContentView(R.layout.activity_usb_chooser)
+        bindViews()
+        adbSwitch.isChecked = adbEnabled
+        selectMode(mode, animate = false)
+        configureWindow()
+    }
+
     private fun configureWindow() {
         window.setBackgroundDrawableResource(android.R.color.transparent)
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.attributes = window.attributes.apply { dimAmount = 0.55f }
+        window.setGravity(Gravity.CENTER)
+        // Configure after setContentView: floating-window initialization resets the
+        // width to WRAP_CONTENT. MATCH_PARENT then uses the safe window frame,
+        // rather than forcing the full display width across a landscape cutout.
         window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     private fun bindViews() {
+        optionViews.clear()
         chooserCard = findViewById(R.id.chooser_card)
         adbSwitch = findViewById(R.id.adb_switch)
         adbSwitch.useUsbManagerColors()

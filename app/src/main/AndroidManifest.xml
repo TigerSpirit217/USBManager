@@ -34,8 +34,10 @@
 
         <activity
             android:name=".ui.DefaultUsbConfigActivity"
+            android:configChanges="orientation|screenSize"
             android:exported="false"
             android:excludeFromRecents="true"
+            android:screenOrientation="behind"
             android:theme="@style/Theme.USBManager.Dialog" />
 
         <!--
@@ -45,9 +47,11 @@
         -->
         <activity
             android:name=".ui.UsbChooserActivity"
+            android:configChanges="orientation|screenSize"
             android:exported="true"
             android:excludeFromRecents="true"
             android:launchMode="singleInstance"
+            android:screenOrientation="behind"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@style/Theme.USBManager.Dialog" />
