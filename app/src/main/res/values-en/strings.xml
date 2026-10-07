@@ -38,13 +38,13 @@
     <string name="auth_entry_title">Computer identification</string>
     <string name="auth_entry_value">Settings ›</string>
     <string name="auth_page_title">Computer identification</string>
-    <string name="auth_usage">Checks whether this device can mount a dedicated USB Authenticate interface. Grant root in KernelSU or another root manager, then tap Detect.</string>
+    <string name="auth_usage">Import a recognition scheme to verify and remember trusted computers. The scheme provides device detection and the USB interface. Grant root access before running detection.</string>
     <string name="auth_detect">Detect this device</string>
     <string name="auth_detecting">Running the local USB capability test…</string>
     <string name="auth_detect_root_required">Grant USB Manager root access in your root manager, then run detection again.</string>
-    <string name="auth_detect_pass">Detection passed. Computer identification is available on this device.</string>
-    <string name="auth_detect_fail">Detection failed. This device is not currently supported.</string>
-    <string name="auth_supported">Computer identification is available</string>
+    <string name="auth_detect_pass">Detection passed. You can enable the current scheme.</string>
+    <string name="auth_detect_fail">The current scheme failed its device check. Review its instructions or try another scheme.</string>
+    <string name="auth_supported">The current scheme passed this device’s support check</string>
     <string name="auth_enable">Enable computer identification (experimental)</string>
     <string name="auth_applying_setting">Applying setting…</string>
     <string name="auth_allow_pair">Allow one new computer</string>

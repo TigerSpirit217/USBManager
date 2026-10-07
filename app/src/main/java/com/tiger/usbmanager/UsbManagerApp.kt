@@ -7,6 +7,7 @@ class UsbManagerApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ModuleSettings.init(this)
+        com.tiger.usbmanager.auth.SchemeStore.cleanupStaging(this)
         clearLegacyHostData()
     }
 

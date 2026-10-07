@@ -5,16 +5,19 @@ import android.util.Base64
 import com.tiger.usbmanager.policy.UsbMode
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.withLock
 
 data class KnownComputer(val id: String, val label: String, val lastSeen: Long, val mode: UsbMode?, val adb: Boolean)
 data class AuthResult(val status: String, val id: String = "", val label: String = "", val mode: UsbMode? = null,
                       val adb: Boolean = false, val detail: String = "")
 
-/** The only app-process entry point that requests root for USB Authenticate. */
+/** Executes the imported scheme's control interface; no computer authentication lives here. */
 object RootAuthManager {
+    private val schemeFilesLock = ReentrantReadWriteLock()
     enum class DetectionFailure { ROOT_REQUIRED, UNSUPPORTED }
 
-    data class Paths(val script: String, val apk: String, val nativeLibrary: String, val appProcess: String)
+    data class Paths(val script: String, val state: String, val abi: String, val appProcess: String)
     data class Detection(
         val supported: Boolean,
         val backend: String = RecognitionSettings.BACKEND_NONE,
@@ -22,77 +25,96 @@ object RootAuthManager {
         val failure: DetectionFailure? = null,
     )
 
-    fun prepare(context: Context): Paths {
-        val directory = File(context.filesDir, "usb-auth").apply { mkdirs() }
-        val script = File(directory, "usb_auth_root.sh")
-        context.assets.open("usb_auth_root.sh").use { input ->
-            script.outputStream().use { output -> input.copyTo(output) }
+    private fun prepare(context: Context): Paths {
+        val installed = checkNotNull(SchemeStore.current(context)) { "Import a recognition scheme first" }
+        check(android.os.Build.VERSION.SDK_INT >= installed.manifest.minSdk) { "Unsupported Android version" }
+        val abi = checkNotNull(SchemeStore.selectAbi(installed.manifest)) { "Unsupported scheme architecture" }
+        val is64Bit = when (abi) {
+            "any" -> android.os.Process.is64Bit()
+            "armeabi-v7a", "x86" -> false
+            else -> true
         }
-        script.setReadable(true, true)
-        val native = File(context.applicationInfo.nativeLibraryDir, "libusbmanager_auth.so")
-        check(native.isFile) { "USB Authenticate native library is unavailable for this CPU" }
-        // The installed library matches the app process, not necessarily the OS default VM.
-        val matchingProcess = "/system/bin/app_process${if (android.os.Process.is64Bit()) "64" else "32"}"
-        val appProcess = matchingProcess.takeIf { File(it).canExecute() } ?: "/system/bin/app_process"
-        return Paths(script.absolutePath, context.applicationInfo.sourceDir, native.absolutePath, appProcess)
+        val matchingProcess = "/system/bin/app_process${if (is64Bit) "64" else "32"}"
+        val appProcess = when {
+            File(matchingProcess).canExecute() -> matchingProcess
+            is64Bit == android.os.Process.is64Bit() -> "/system/bin/app_process"
+            else -> error("The scheme requires a ${if (is64Bit) 64 else 32}-bit Android runtime")
+        }
+        return Paths(File(installed.directory, "entry.sh").absolutePath,
+            "/data/adb/usbmanager-schemes/${installed.manifest.storageId}", abi, appProcess)
     }
 
+    @Synchronized
     fun detect(context: Context): Detection {
+        val installed = SchemeStore.current(context)
+            ?: return Detection(false, detail = "Import a recognition scheme first", failure = DetectionFailure.UNSUPPORTED)
+        RecognitionSettings.setEnabled(context, false)
+        RecognitionSettings.saveDetection(context, installed.revision, false)
         if (!isRootAuthorized()) {
+            RecognitionSettings.saveDetection(context, installed.revision, false)
             return Detection(false, detail = "Root access was not granted", failure = DetectionFailure.ROOT_REQUIRED)
         }
-        val paths = prepare(context)
-        val result = runRoot(paths, "detect", "closed", RecognitionSettings.BACKEND_NONE, 45_000)
-        val backend = result.output.lineSequence().firstOrNull { it.startsWith("BACKEND=") }?.substringAfter('=')
-        // ReSukiSU's global root shell may report a non-zero wrapper exit code
-        // after the inner probe has completed successfully. BACKEND is emitted
-        // only by our root-owned script after all capability checks pass.
-        if (backend in setOf(RecognitionSettings.BACKEND_GENERIC, RecognitionSettings.BACKEND_NOTHING)) {
-            RecognitionSettings.saveDetectedBackend(context, backend!!)
-            return Detection(true, backend, result.output)
+        RecognitionSettings.markTransition(context, 50_000)
+        RecognitionSettings.markSchemeExecution(context)
+        return try {
+            val result = runRoot(prepare(context), "detect", "closed", 45_000)
+            val supported = result.code == 0 && result.output.lineSequence().any { it.trim() == "USBMGR_SUPPORTED 1" }
+            RecognitionSettings.saveDetection(context, installed.revision, supported)
+            Detection(supported, installed.manifest.id, result.output,
+                if (supported) null else DetectionFailure.UNSUPPORTED)
+        } finally {
+            RecognitionSettings.markTransition(context, 3_000)
         }
-        return Detection(
-            false,
-            detail = result.output.ifBlank { "USB gadget capability unavailable" },
-            failure = DetectionFailure.UNSUPPORTED,
-        )
     }
 
+    @Synchronized
     fun start(context: Context, mode: UsbMode, adb: Boolean): AuthResult {
         if (!RecognitionSettings.isEnabled(context)) return AuthResult("FAILED", detail = "Recognition disabled")
-        // The computer supplies its initial display name during HELLO2. The user
-        // can customize it after the pairing handshake has actually succeeded.
+        // The scheme supplies the initial computer name after successful pairing.
         val encodedProfile = profile("", mode, adb, allowEmptyLabel = true)
         val paths = prepare(context)
         RecognitionSettings.markTransition(context, 125_000L)
         return try {
-            val result = runRoot(paths, "start", "pair", RecognitionSettings.backend(context), 120_000, encodedProfile)
-            parseAuthResult(result.output)
+            val result = runRoot(paths, "start", "pair", 120_000, encodedProfile)
+            if (result.code == 0) parseAuthResult(result.output) else AuthResult("FAILED", detail = result.output.takeLast(240))
         } finally {
             RecognitionSettings.markTransition(context, 3_000L)
         }
     }
 
+    @Synchronized
     fun recognize(context: Context): AuthResult {
         if (!RecognitionSettings.isEnabled(context)) return AuthResult("FAILED", detail = "Recognition disabled")
         val paths = prepare(context)
-        val result = runRoot(paths, "start", "closed", RecognitionSettings.backend(context), 80_000)
-        return parseAuthResult(result.output)
+        val result = runRoot(paths, "start", "closed", 80_000)
+        return if (result.code == 0) parseAuthResult(result.output) else AuthResult("FAILED", detail = result.output.takeLast(240))
     }
 
-    fun restore(context: Context): Boolean {
+    fun restore(context: Context): Boolean = schemeFilesLock.readLock().withLock {
+        restoreCurrent(context)
+    }
+
+    fun restoreIfCurrent(context: Context, revision: String): Boolean = schemeFilesLock.readLock().withLock {
+        if (RecognitionSettings.schemeRevision(context) != revision) return@withLock true
+        restoreCurrent(context)
+    }
+
+    private fun restoreCurrent(context: Context): Boolean {
+        if (SchemeStore.current(context) == null) return true
         RecognitionSettings.markTransition(context, 20_000L)
         val paths = prepare(context)
-        val result = runRoot(paths, "restore", "closed", RecognitionSettings.backend(context), 20_000)
-        return result.code == 0 || result.output.lineSequence().any { it.startsWith("FRAMEWORK_RESTORE ") }
+        val result = runRoot(paths, "restore", "closed", 20_000)
+        return result.code == 0 && result.output.lineSequence().any { it.trim() == "USBMGR_RESTORED" }
     }
 
+    @Synchronized
     fun list(context: Context): List<KnownComputer> {
         val paths = prepare(context)
-        val result = runRoot(paths, "list", "closed", RecognitionSettings.backend(context), 10_000)
+        val result = runRoot(paths, "list", "closed", 10_000)
+        if (result.code != 0) error(result.output.takeLast(240))
         return result.output.lineSequence().mapNotNull { line ->
             val fields = line.trim().split('|')
-            if (fields.size != 5 || !fields[0].matches(Regex("[0-9a-f]{64}"))) return@mapNotNull null
+            if (fields.size != 5 || !fields[0].matches(Regex("[0-9a-f]{64}")) || fields[4] !in setOf("true", "false")) return@mapNotNull null
             runCatching {
                 KnownComputer(
                     fields[0],
@@ -105,17 +127,41 @@ object RootAuthManager {
         }.toList()
     }
 
+    @Synchronized
     fun delete(context: Context, id: String): Boolean {
         require(id.matches(Regex("[0-9a-f]{64}")))
         val paths = prepare(context)
-        val result = runRoot(paths, "delete", id, RecognitionSettings.backend(context), 10_000)
-        return result.output.lineSequence().any { it.trim() == "DELETED" }
+        val result = runRoot(paths, "delete", id, 10_000)
+        return result.code == 0 && result.output.lineSequence().any { it.trim() == "DELETED" }
     }
 
+    @Synchronized
     fun update(context: Context, id: String, label: String, mode: UsbMode, adb: Boolean): Boolean {
         require(id.matches(Regex("[0-9a-f]{64}")))
-        return runRoot(prepare(context), "edit", id, RecognitionSettings.backend(context), 10_000,
-            profile(label, mode, adb)).output.lineSequence().any { it.trim() == "UPDATED" }
+        val result = runRoot(prepare(context), "edit", id, 10_000, profile(label, mode, adb))
+        return result.code == 0 && result.output.lineSequence().any { it.trim() == "UPDATED" }
+    }
+
+    @Synchronized
+    fun installScheme(context: Context, candidate: SchemeStore.Candidate) {
+        schemeFilesLock.writeLock().withLock {
+            val restoreNeeded = RecognitionSettings.hasExecutedScheme(context)
+            RecognitionSettings.setEnabled(context, false)
+            if (restoreNeeded) check(restore(context)) { "Cannot restore the current scheme; import was cancelled" }
+            SchemeStore.activate(context, candidate)
+            RecognitionSettings.clearTransition(context)
+        }
+    }
+
+    @Synchronized
+    fun removeScheme(context: Context) {
+        schemeFilesLock.writeLock().withLock {
+            val restoreNeeded = RecognitionSettings.hasExecutedScheme(context)
+            RecognitionSettings.setEnabled(context, false)
+            if (restoreNeeded) check(restore(context)) { "Cannot restore the current scheme; removal was cancelled" }
+            SchemeStore.remove(context)
+            RecognitionSettings.clearTransition(context)
+        }
     }
 
     private fun profile(label: String, mode: UsbMode, adb: Boolean, allowEmptyLabel: Boolean = false): String {
@@ -131,12 +177,13 @@ object RootAuthManager {
                 detail = output.takeLast(240))
         if (value == "TIMEOUT") return AuthResult("TIMEOUT")
         val fields = value.split('|')
-        if (fields.size != 5 || !fields[1].matches(Regex("[0-9a-f]{64}"))) return AuthResult("FAILED", detail = value)
+        if (fields.size != 5 || !fields[1].matches(Regex("[0-9a-f]{64}")) || fields[4] !in setOf("true", "false")) return AuthResult("FAILED", detail = value)
         val label = runCatching { String(Base64.decode(fields[2], Base64.DEFAULT), StandardCharsets.UTF_8) }
             .getOrDefault("")
         if (fields[0] !in setOf("KNOWN", "PAIRED", "UNKNOWN")) return AuthResult("FAILED", detail = value)
-        return AuthResult(fields[0], fields[1], label,
-            UsbMode.entries.firstOrNull { it.wireValue == fields[3] }, fields[4] == "true")
+        val mode = UsbMode.entries.firstOrNull { it.wireValue == fields[3] }
+        if (fields[0] != "UNKNOWN" && mode == null) return AuthResult("FAILED", detail = value)
+        return AuthResult(fields[0], fields[1], label, mode, fields[4] == "true")
     }
 
     private data class Result(val code: Int, val output: String)
@@ -163,14 +210,19 @@ object RootAuthManager {
         }
     }
 
-    private fun runRoot(paths: Paths, action: String, mode: String, backend: String, timeoutMs: Long, profile: String = "none"): Result {
-        val command = "sh ${paths.script} $action ${paths.apk} ${paths.nativeLibrary} $mode $backend $profile ${paths.appProcess}"
+    private fun runRoot(paths: Paths, action: String, mode: String, timeoutMs: Long, profile: String = "none"): Result {
+        fun quote(value: String) = "'" + value.replace("'", "'\\''") + "'"
+        val command = listOf("/system/bin/sh", paths.script, action, paths.state, paths.abi, paths.appProcess, mode, profile)
+            .joinToString(" ", transform = ::quote)
         val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
         val output = StringBuilder()
         fun drain(stream: java.io.InputStream) = Thread {
             runCatching {
                 stream.bufferedReader().useLines { lines ->
-                    lines.forEach { line -> synchronized(output) { output.appendLine(line) } }
+                    lines.forEach { line -> synchronized(output) {
+                        output.appendLine(line)
+                        if (output.length > 1024 * 1024) output.delete(0, output.length - 1024 * 1024)
+                    } }
                 }
             }
         }

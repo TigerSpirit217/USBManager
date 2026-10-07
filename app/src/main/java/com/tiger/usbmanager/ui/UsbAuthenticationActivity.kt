@@ -1,6 +1,7 @@
 package com.tiger.usbmanager.ui
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.text.InputFilter
 import android.view.Gravity
@@ -23,6 +24,7 @@ import com.tiger.usbmanager.R
 import com.tiger.usbmanager.auth.KnownComputer
 import com.tiger.usbmanager.auth.RecognitionSettings
 import com.tiger.usbmanager.auth.RootAuthManager
+import com.tiger.usbmanager.auth.SchemeStore
 import com.tiger.usbmanager.policy.UsbMode
 import java.text.DateFormat
 import java.util.Date
@@ -31,6 +33,8 @@ class UsbAuthenticationActivity : Activity() {
     private lateinit var content: LinearLayout
     private var settingsCardView: MaterialCardView? = null
     private var transitionRow: LinearLayout? = null
+    private var importDialog: androidx.appcompat.app.AlertDialog? = null
+    private var tearingDown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +46,7 @@ class UsbAuthenticationActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(getColor(R.color.bg_page))
+            applySystemBarPadding(includeHorizontal = true)
             addView(toolbar(getString(R.string.auth_page_title), back = { finish() }).apply {
                 applySystemBarPadding(includeTop = true)
             })
@@ -55,11 +60,16 @@ class UsbAuthenticationActivity : Activity() {
         settingsCardView = null
         content.apply {
             addView(introCard())
+            addView(sectionLabel(getString(R.string.auth_scheme_title)))
+            addView(schemeCard())
             if (message != null) addView(messageCard(message), verticalMargins(top = dp(12), bottom = 0))
-            if (!RecognitionSettings.isSupported(this@UsbAuthenticationActivity)) {
+            if (SchemeStore.current(this@UsbAuthenticationActivity) == null) {
+                addView(messageCard(getString(R.string.auth_scheme_required)), verticalMargins(top = dp(12)))
+            } else if (!RecognitionSettings.isSupported(this@UsbAuthenticationActivity)) {
                 addView(primaryButton(getString(R.string.auth_detect)) { runDetection() }, verticalMargins(top = dp(18)))
             } else {
                 addView(messageCard(getString(R.string.auth_supported)), verticalMargins(top = dp(12), bottom = 0))
+                addView(outlinedButton(getString(R.string.auth_detect)) { runDetection() }, verticalMargins(top = dp(8), bottom = 0))
                 addView(sectionLabel(getString(R.string.auth_section_title)))
                 val settings = settingsCard()
                 settingsCardView = settings
@@ -89,11 +99,120 @@ class UsbAuthenticationActivity : Activity() {
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
             addView(TextView(this@UsbAuthenticationActivity).apply {
                 text = getString(R.string.auth_usage)
-                textSize = 14f
-                setTextColor(getColor(R.color.text_body))
+                textSize = 12f
+                setTextColor(getColor(R.color.text_secondary))
                 setLineSpacing(0f, 1.18f)
             })
         })
+    }
+
+    private fun schemeCard(): MaterialCardView = surfaceCard().apply {
+        val installed = SchemeStore.current(this@UsbAuthenticationActivity)
+        addView(LinearLayout(this@UsbAuthenticationActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(12))
+            addView(TextView(context).apply {
+                text = installed?.manifest?.name ?: getString(R.string.auth_scheme_none)
+                textSize = 15f
+                setTextColor(getColor(R.color.text_primary))
+            })
+            if (installed != null) {
+                addView(TextView(context).apply {
+                    text = "${installed.manifest.version} · ${installed.manifest.author}\n${installed.manifest.description}"
+                    textSize = 12f
+                    setTextColor(getColor(R.color.text_secondary))
+                    setPadding(0, dp(5), 0, dp(8))
+                    setLineSpacing(0f, 1.18f)
+                })
+            }
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.END
+                addView(outlinedButton(getString(R.string.auth_scheme_import)) { chooseScheme() })
+                if (installed != null) {
+                    addView(outlinedButton(getString(R.string.auth_scheme_remove)) { confirmRemoveScheme() })
+                }
+            })
+        })
+    }
+
+    private fun chooseScheme() {
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed"))
+        }, 1001)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != 1001 || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        showBusy(getString(R.string.auth_scheme_importing))
+        val appContext = applicationContext
+        Thread {
+            val candidate = runCatching {
+                appContext.contentResolver.openInputStream(uri)?.use { SchemeStore.prepare(appContext, it) }
+                    ?: error("Cannot open package")
+            }
+            runOnUiThread {
+                if (isDestroyed || isFinishing) {
+                    candidate.getOrNull()?.directory?.deleteRecursively()
+                    return@runOnUiThread
+                }
+                candidate.onSuccess { confirmImport(it) }.onFailure {
+                    render(getString(R.string.auth_scheme_error, it.message.orEmpty()))
+                }
+            }
+        }.apply { name = "usb-scheme-import"; start() }
+    }
+
+    private fun confirmImport(candidate: SchemeStore.Candidate) {
+        var accepted = false
+        val manifest = candidate.manifest
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.auth_scheme_import)
+            .setMessage(getString(R.string.auth_scheme_confirm, manifest.name, manifest.version, manifest.author))
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.auth_scheme_import) { _, _ ->
+                accepted = true
+                showBusy(getString(R.string.auth_scheme_importing))
+                val appContext = applicationContext
+                Thread {
+                    val result = runCatching { RootAuthManager.installScheme(appContext, candidate) }
+                    candidate.directory.deleteRecursively()
+                    runOnUiThread {
+                        if (!isDestroyed && !isFinishing) render(if (result.isSuccess) getString(R.string.auth_scheme_imported)
+                            else getString(R.string.auth_scheme_error, result.exceptionOrNull()?.message.orEmpty()))
+                    }
+                }.apply { name = "usb-scheme-install"; start() }
+            }
+            .create().apply {
+                importDialog = this
+                setOnDismissListener {
+                    importDialog = null
+                    if (!accepted) {
+                        candidate.directory.deleteRecursively()
+                        if (!tearingDown && !isDestroyed && !isFinishing) render()
+                    }
+                }
+                show()
+            }
+    }
+
+    private fun confirmRemoveScheme() {
+        MaterialAlertDialogBuilder(this).setMessage(R.string.auth_scheme_remove_confirm)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.auth_scheme_remove) { _, _ ->
+                showBusy(getString(R.string.auth_applying_setting))
+                val appContext = applicationContext
+                Thread {
+                    val result = runCatching { RootAuthManager.removeScheme(appContext) }
+                    runOnUiThread {
+                        if (!isDestroyed && !isFinishing) render(if (result.isSuccess) null
+                            else getString(R.string.auth_scheme_error, result.exceptionOrNull()?.message.orEmpty()))
+                    }
+                }.start()
+            }.show()
     }
 
     private fun settingsCard(): MaterialCardView = surfaceCard().apply {
@@ -142,11 +261,13 @@ class UsbAuthenticationActivity : Activity() {
 
     private fun runDetection() {
         showBusy(getString(R.string.auth_detecting))
+        val appContext = applicationContext
         Thread {
-            val result = runCatching { RootAuthManager.detect(this) }.getOrElse {
+            val result = runCatching { RootAuthManager.detect(appContext) }.getOrElse {
                 RootAuthManager.Detection(false, detail = it.message.orEmpty(), failure = RootAuthManager.DetectionFailure.UNSUPPORTED)
             }
             runOnUiThread {
+                if (isDestroyed || isFinishing) return@runOnUiThread
                 val message = when {
                     result.supported -> R.string.auth_detect_pass
                     result.failure == RootAuthManager.DetectionFailure.ROOT_REQUIRED -> R.string.auth_detect_root_required
@@ -203,6 +324,7 @@ class UsbAuthenticationActivity : Activity() {
             val result = runCatching { RootAuthManager.start(this, mode, adb) }.getOrNull()
             val paired = result != null && result.status in setOf("PAIRED", "KNOWN") && result.mode != null
             runOnUiThread {
+                if (isDestroyed || isFinishing) return@runOnUiThread
                 if (!paired) { render(getString(R.string.auth_pair_failed)); return@runOnUiThread }
                 checkNotNull(result)
                 val computer = KnownComputer(result.id, result.label, System.currentTimeMillis(), result.mode, result.adb)
@@ -267,7 +389,7 @@ class UsbAuthenticationActivity : Activity() {
     }
 
     private fun messageCard(value: String) = TextView(this).apply {
-        text = value; textSize = 14f; setTextColor(getColor(R.color.on_accent_soft))
+        text = value; textSize = 13f; setTextColor(getColor(R.color.on_accent_soft))
         background = roundedBackground(R.color.accent_soft, 16)
         setPadding(dp(15), dp(12), dp(15), dp(12))
     }
@@ -285,5 +407,11 @@ class UsbAuthenticationActivity : Activity() {
             marginStart = dp(8)
         }
         setOnClickListener { click() }
+    }
+
+    override fun onDestroy() {
+        tearingDown = true
+        importDialog?.dismiss()
+        super.onDestroy()
     }
 }

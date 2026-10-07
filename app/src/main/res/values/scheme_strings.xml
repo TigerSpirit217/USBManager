@@ -1,0 +1,12 @@
+<resources>
+    <string name="auth_scheme_title">识别方案</string>
+    <string name="auth_scheme_none">尚未导入方案包</string>
+    <string name="auth_scheme_required">请先导入方案包，再运行方案提供的设备支持检测。</string>
+    <string name="auth_scheme_import">导入方案包</string>
+    <string name="auth_scheme_remove">移除方案</string>
+    <string name="auth_scheme_importing">正在校验和导入方案包…</string>
+    <string name="auth_scheme_confirm">%1$s\n版本：%2$s\n作者：%3$s\n\n方案中的检测、识别与恢复脚本会以 root 权限执行，请仅导入可信来源的方案。导入后会关闭识别，需重新检测并手动启用。</string>
+    <string name="auth_scheme_imported">方案已导入。请检测此设备，检测通过后再启用识别。</string>
+    <string name="auth_scheme_error">方案操作失败：%1$s</string>
+    <string name="auth_scheme_remove_confirm">移除当前识别方案并关闭识别？已保存的电脑数据仍由方案保留，重新导入同一方案后可继续使用。</string>
+</resources>

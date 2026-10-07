@@ -38,13 +38,13 @@
     <string name="auth_entry_title">电脑识别与记忆</string>
     <string name="auth_entry_value">设置 ›</string>
     <string name="auth_page_title">电脑识别与记忆</string>
-    <string name="auth_usage">尝试验证此设备是否可以挂载独立 USB Authenticate 接口。请在 KernelSU 等 root 管理器中授予 root，然后点击检测。</string>
+    <string name="auth_usage">导入识别方案后，可验证并记住可信电脑。设备支持检测与 USB 接口实现由方案提供；请在 root 管理器中授予权限后检测。</string>
     <string name="auth_detect">检测此设备</string>
     <string name="auth_detecting">正在进行本地 USB 能力检测…</string>
     <string name="auth_detect_root_required">请先授予 USB 管理器 root 权限，然后重新检测。</string>
-    <string name="auth_detect_pass">检测通过。此设备支持电脑识别与记忆功能。</string>
-    <string name="auth_detect_fail">检测未通过，此设备当前暂不支持该功能。</string>
-    <string name="auth_supported">此设备支持电脑识别与记忆功能</string>
+    <string name="auth_detect_pass">检测通过，可以启用当前识别方案。</string>
+    <string name="auth_detect_fail">当前方案未通过支持检测，可查看方案说明或导入其他方案重试。</string>
+    <string name="auth_supported">当前方案已通过此设备的支持检测</string>
     <string name="auth_enable">启用电脑识别与记忆（实验性）</string>
     <string name="auth_applying_setting">正在应用设置…</string>
     <string name="auth_allow_pair">允许一台新电脑配对</string>

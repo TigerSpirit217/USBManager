@@ -188,7 +188,7 @@ class GameDndSettingsActivity : Activity() {
             })
             addView(divider())
             addView(bodyText(R.string.game_dnd_apps_hint).apply {
-                textSize = 13f
+                textSize = 12f
                 setTextColor(getColor(R.color.text_secondary))
                 setPadding(dp(16), dp(12), dp(16), dp(14))
             })
@@ -197,8 +197,8 @@ class GameDndSettingsActivity : Activity() {
 
     private fun bodyText(res: Int) = TextView(this).apply {
         setText(res)
-        textSize = 14f
-        setTextColor(getColor(R.color.text_body))
+        textSize = 12f
+        setTextColor(getColor(R.color.text_secondary))
         setLineSpacing(0f, 1.18f)
     }
 

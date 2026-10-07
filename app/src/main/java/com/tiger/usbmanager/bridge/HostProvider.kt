@@ -147,6 +147,7 @@ class HostProvider : ContentProvider() {
         // Provider binder threads return immediately. Root and the USB handshake
         // run in the app's mount namespace, where KernelSU exposes `su`.
         authWorker.execute {
+            if (synchronized(authLock) { authSession != id }) return@execute
             val result = runCatching { RootAuthManager.recognize(ctx) }
                 .getOrElse { AuthResult("FAILED", detail = it.message.orEmpty()) }
             synchronized(authLock) {
@@ -175,10 +176,16 @@ class HostProvider : ContentProvider() {
 
     private fun handleCancelAuth(extras: Bundle?): Bundle {
         val id = extras?.getLong(UsbBridgeContract.KEY_AUTH_SESSION, 0L) ?: 0L
-        synchronized(authLock) {
-            if (id == authSession) { authSession = 0L; authResult = null }
+        val cancelled = synchronized(authLock) {
+            if (id != 0L && id == authSession) { authSession = 0L; authResult = null; true } else false
         }
-        // A closed root session restores its gadget in its own finally block.
+        if (cancelled) context?.let { ctx ->
+            val revision = RecognitionSettings.schemeRevision(ctx)
+            Thread {
+                runCatching { RootAuthManager.restoreIfCurrent(ctx, revision) }
+                    .onFailure { Log.w(TAG, "Scheme recovery failed", it) }
+            }.apply { name = "usb-scheme-recovery"; isDaemon = true; start() }
+        }
         return Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, true) }
     }
 

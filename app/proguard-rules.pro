@@ -29,13 +29,6 @@
     public void install(...);
 }
 
-# Launched by app_process from the root helper; native entry points use fixed JNI names.
--keep,allowoptimization class com.tiger.usbmanager.auth.UsbAuthDaemon {
-    public static void main(java.lang.String[]);
-    native <methods>;
-}
-# 默认 proguard-android-optimize.txt 已有通用 JNI 规则。
-
 # ----------------------------------------------------------------------
 # Gson（跨进程 pending-apply 载荷）
 # ----------------------------------------------------------------------
