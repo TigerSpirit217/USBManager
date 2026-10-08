@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "modules": [
+    {
+      "packageName": "io.github.shuoh118.autousbmtp",
+      "inspectVersion": { "versionName": "3.0fix", "versionCode": "3" },
+      "name": { "zh": "Auto USB MTP", "en": "Auto USB MTP" },
+      "feature": { "zh": "连接时自动切换 MTP 并开启 ADB", "en": "Automatic MTP and ADB on connection" },
+      "briefReason": { "zh": "连接或重新枚举时自动切换 MTP 并开启 ADB，可能覆盖你的 USB 和 ADB 选择。", "en": "Automatically enables MTP and ADB on connection or re-enumeration, potentially overriding your USB and ADB choices." },
+      "detailedReason": { "zh": "该软件在连接时固定应用 MTP 和 ADB 开启。它与 USBManager 在连接时形成处理竞态，将会干扰 USBManager 对 USB 模式和 ADB 状态的相关配置的应用。", "en": "This app forcibly sets MTP and ADB to enabled upon connection. It creates a race condition with USBManager during connection handling, which will interfere with USBManager’s ability to apply the relevant USB mode and ADB state configurations." },
+      "disableInstructions": { "zh": "在 LSPosed 管理器的「模块」中关闭 Auto USB MTP，然后重启手机。", "en": "Turn off Auto USB MTP in LSPosed Manager → Modules, then reboot the phone." }
+    },
+    {
+      "packageName": "com.yuuki.automtp",
+      "inspectVersion": { "versionName": "1.0", "versionCode": "1" },
+      "name": { "zh": "AutoMTP", "en": "AutoMTP" },
+      "feature": { "zh": "连接时自动切换 MTP", "en": "Automatic MTP on connection" },
+      "briefReason": { "zh": "连接或重新枚举时自动切换 MTP，可能覆盖你选择的其它 USB 模式。", "en": "Automatically enables MTP on connection or re-enumeration, potentially overriding your USB choices." },
+      "detailedReason": { "zh": "该软件在连接时固定应用 MTP 模式。它与 USBManager 在连接时形成处理竞态，将会干扰 USBManager 对 USB 模式的相关配置的应用。", "en": "This app forcibly applies MTP mode upon connection. It creates a race condition with USBManager during connection handling, which will interfere with USBManager’s ability to apply the relevant USB mode configurations." },
+      "disableInstructions": { "zh": "在 LSPosed 管理器的「模块」中关闭 AutoMTP，然后重启手机。", "en": "Turn off AutoMTP in LSPosed Manager → Modules, then reboot the phone." }
+    },
+    {
+      "packageName": "com.fun.mtp",
+      "inspectVersion": { "versionName": "1.6", "versionCode": "365" },
+      "name": { "zh": "ForceMTP", "en": "ForceMTP" },
+      "feature": { "zh": "强制 MTP 文件传输", "en": "Forced MTP file transfer" },
+      "briefReason": { "zh": "连接或重新枚举时自动切换 MTP，可能覆盖你选择的其它 USB 模式。", "en": "Automatically enables MTP on connection or re-enumeration, potentially overriding your USB choices." },
+      "detailedReason": { "zh": "该软件在连接时固定应用 MTP 模式。它与 USBManager 在连接时形成处理竞态，将会干扰 USBManager 对 USB 模式的相关配置的应用。", "en": "This app forcibly applies MTP mode upon connection. It creates a race condition with USBManager during connection handling, which will interfere with USBManager’s ability to apply the relevant USB mode configurations." },
+      "disableInstructions": { "zh": "在 LSPosed 管理器的「模块」中关闭 ForceMTP，然后重启手机。", "en": "Turn off ForceMTP in LSPosed Manager → Modules, then reboot the phone." }
+    },
+    {
+      "packageName": "com.function.mtp",
+      "inspectVersion": { "versionName": "200", "versionCode": "200" },
+      "name": { "zh": "文件传输", "en": "文件传输" },
+      "feature": { "zh": "强制文件传输模式", "en": "Forced file-transfer mode" },
+      "briefReason": { "zh": "连接或重新枚举时自动切换 MTP，可能覆盖你选择的其它 USB 模式。", "en": "Automatically enables MTP on connection or re-enumeration, potentially overriding your USB choices." },
+      "detailedReason": { "zh": "该软件在连接时固定应用 MTP 模式。它与 USBManager 在连接时形成处理竞态，将会干扰 USBManager 对 USB 模式的相关配置的应用。", "en": "This app forcibly applies MTP mode upon connection. It creates a race condition with USBManager during connection handling, which will interfere with USBManager’s ability to apply the relevant USB mode configurations." },
+      "disableInstructions": { "zh": "在 LSPosed 管理器的「模块」中关闭 文件传输 ，然后重启手机。", "en": "Turn off 文件传输 in LSPosed Manager → Modules, then reboot the phone." }
+    },
+    {
+      "packageName": "top.cbug.adbx",
+      "inspectVersion": { "versionName": "1.1.2", "versionCode": "5" },
+      "name": { "zh": "ADB_X", "en": "ADB_X" },
+      "feature": { "zh": "有线 USB 调试控制", "en": "Wired USB debugging control" },
+      "briefReason": { "zh": "此应用的 “受信任设备连接时自动开启ADB” 功能与 USBManager 的 ADB 控制存在冲突，可能覆盖你的 ADB 选择。", "en": "This app’s “Auto-enable ADB on trusted devices” feature conflicts with USBManager’s ADB controls and may override your ADB selection." },
+      "detailedReason": { "zh": "若连接到的电脑被 ADB_X 视作受信任设备，可能直接打开 ADB 调试，与 USBManager 的 ADB 控制存在竞争，这可能导致 USBManager 的 ADB 配置被覆盖。此外还请留意， USBManager 的拔线停止 adbd 选项或许会中断无线会话。", "en": "If the connected computer is considered a trusted device by ADB_X, it may directly enable ADB debugging, competing with USBManager’s ADB control. This may cause USBManager’s ADB configuration to be overridden. Also note that USBManager’s “stop adbd on unplug” option may interrupt wireless sessions." },
+      "disableInstructions": { "zh": "在 ADB_X 的 有线页面关闭“受信任设备连接时自动开启ADB”与“没有受信任设备时自动关闭ADB”。", "en": "On the Wired page in ADB_X, turn off “Auto-enable ADB on trusted devices” and “Auto-disable ADB when no trusted device is connected”." }
+    }
+  ]
+}

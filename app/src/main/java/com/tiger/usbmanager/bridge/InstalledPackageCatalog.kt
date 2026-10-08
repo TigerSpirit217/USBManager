@@ -8,6 +8,7 @@ import android.os.SystemClock
 import com.tiger.usbmanager.ModuleConstants
 import java.util.UUID
 import androidx.core.os.BundleCompat
+import java.util.concurrent.locks.ReentrantLock
 
 data class CatalogApp(val packageName: String, val label: String, val applicationInfo: ApplicationInfo? = null) {
     val isSystem: Boolean
@@ -17,7 +18,51 @@ data class CatalogApp(val packageName: String, val label: String, val applicatio
 
 /** Called on a worker thread. Only system_server obtains the package snapshot. */
 object InstalledPackageCatalog {
-    fun load(context: Context): List<CatalogApp> {
+    // HostProvider has one request mailbox. Serialize readers through the whole
+    // request, including metadata, so the main screen and app picker cannot replace
+    // each other's in-flight snapshots. Waiting readers remain cancellable.
+    private val requestLock = ReentrantLock()
+
+    fun loadPackageNames(context: Context): Set<String> = withRequest(context) { result, _ ->
+        result.getStringArrayList(UsbBridgeContract.KEY_PACKAGE_NAMES).orEmpty().toSet().also {
+            // Never advance the compatibility baseline with an empty/invalid reply.
+            check(context.packageName in it) { "Incomplete system package catalog" }
+        }
+    }
+
+    fun load(context: Context): List<CatalogApp> = withRequest(context) { result, request ->
+        val names = result.getStringArrayList(UsbBridgeContract.KEY_PACKAGE_NAMES).orEmpty()
+        val infos = mutableMapOf<String, ApplicationInfo>()
+        var page = 0
+        do {
+            if (Thread.currentThread().isInterrupted) throw InterruptedException()
+            val pageArgs = Bundle().apply { putInt(UsbBridgeContract.KEY_PACKAGE_PAGE, page++) }
+            val batch = context.contentResolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_GET_PACKAGE_APPS, request, pageArgs)
+                ?: error("Application metadata unavailable")
+            val apps = BundleCompat.getParcelableArrayList(batch, UsbBridgeContract.KEY_PACKAGE_APPS, ApplicationInfo::class.java).orEmpty()
+            apps.forEach { infos[it.packageName] = it }
+        } while (apps.size == UsbBridgeContract.PACKAGE_PAGE_SIZE)
+        check(names.isEmpty() || infos.isNotEmpty()) { "System catalog requires module update/reboot" }
+        names.mapNotNull { name ->
+            val info = infos[name] ?: return@mapNotNull null
+            // Passing the supplied ApplicationInfo loads APK resources without
+            // performing an app-side installed-app or package-info query.
+            val label = runCatching { info.loadLabel(context.packageManager).toString().trim() }.getOrNull()
+                ?.takeIf { it.isNotEmpty() } ?: name
+            CatalogApp(name, label, info)
+        }
+    }
+
+    private fun <T> withRequest(context: Context, read: (Bundle, String) -> T): T {
+        requestLock.lockInterruptibly()
+        try {
+            return awaitRequest(context, read)
+        } finally {
+            requestLock.unlock()
+        }
+    }
+
+    private fun <T> awaitRequest(context: Context, read: (Bundle, String) -> T): T {
         val request = UUID.randomUUID().toString()
         val extras = Bundle().apply {
             putString(UsbBridgeContract.KEY_PACKAGE_REQUEST, request)
@@ -37,26 +82,7 @@ object InstalledPackageCatalog {
             val result = resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_GET_PACKAGE_NAMES, request, null)
             if (result?.getBoolean(UsbBridgeContract.KEY_PACKAGE_READY) == true) {
                 check(result.getString(UsbBridgeContract.KEY_PACKAGE_ERROR).isNullOrEmpty())
-                val names = result.getStringArrayList(UsbBridgeContract.KEY_PACKAGE_NAMES).orEmpty()
-                val infos = mutableMapOf<String, ApplicationInfo>()
-                var page = 0
-                do {
-                    if (Thread.currentThread().isInterrupted) throw InterruptedException()
-                    val pageArgs = Bundle().apply { putInt(UsbBridgeContract.KEY_PACKAGE_PAGE, page++) }
-                    val batch = resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_GET_PACKAGE_APPS, request, pageArgs)
-                        ?: error("Application metadata unavailable")
-                    val apps = BundleCompat.getParcelableArrayList(batch, UsbBridgeContract.KEY_PACKAGE_APPS, ApplicationInfo::class.java).orEmpty()
-                    apps.forEach { infos[it.packageName] = it }
-                } while (apps.size == UsbBridgeContract.PACKAGE_PAGE_SIZE)
-                check(names.isEmpty() || infos.isNotEmpty()) { "System catalog requires module update/reboot" }
-                return names.mapNotNull { name ->
-                    val info = infos[name] ?: return@mapNotNull null
-                    // Passing the supplied ApplicationInfo loads APK resources without
-                    // performing an app-side installed-app or package-info query.
-                    val label = runCatching { info.loadLabel(context.packageManager).toString().trim() }.getOrNull()
-                        ?.takeIf { it.isNotEmpty() } ?: name
-                    CatalogApp(name, label, info)
-                }
+                return read(result, request)
             }
             Thread.sleep(250L)
         }

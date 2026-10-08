@@ -1,0 +1,12 @@
+<resources>
+    <color name="compatibility_surface">#332B16</color>
+    <color name="compatibility_module_surface">#40351C</color>
+    <color name="compatibility_outline">#66542A</color>
+    <color name="compatibility_text_primary">#FFF3C4</color>
+    <color name="compatibility_text_secondary">#D4C394</color>
+    <color name="compatibility_accent">#F1CB67</color>
+    <color name="compatibility_accent_pressed">#FFE09A</color>
+    <color name="compatibility_on_accent">#352600</color>
+    <color name="compatibility_icon_background">#56431E</color>
+    <color name="compatibility_ripple">#33F1CB67</color>
+</resources>

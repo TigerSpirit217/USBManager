@@ -124,4 +124,14 @@
     <string name="developer_name">Developer: TigerSpirit217</string>
     <string name="github_repository">GitHub · USBManager</string>
     <string name="github_open_failed">No app is available to open this link</string>
+    <!-- Main-screen compatibility warning; module-specific text lives in the JSON asset. -->
+    <string name="compatibility_warning_title">Module compatibility notice</string>
+    <string name="compatibility_warning_count">Potentially conflicting apps: %1$d</string>
+    <string name="compatibility_warning_intro">These installed apps may affect USBManager. If the listed modules or features are enabled, turn them off as described below. You can ignore this notice if they are already disabled.</string>
+    <string name="compatibility_feature">Feature: %1$s</string>
+    <string name="compatibility_reason">Reason: %1$s</string>
+    <string name="compatibility_disable">How to disable: %1$s</string>
+    <string name="compatibility_show_details">Show more information</string>
+    <string name="compatibility_hide_details">Hide more information</string>
+    <string name="compatibility_restored_catalog_unavailable">The catalog has changed or is unavailable. You can dismiss this notice.</string>
 </resources>

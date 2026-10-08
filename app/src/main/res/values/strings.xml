@@ -125,4 +125,14 @@
     <string name="github_repository">GitHub · USBManager</string>
     <string name="github_repository_url" translatable="false">https://github.com/TigerSpirit217/USBManager</string>
     <string name="github_open_failed">未找到可打开链接的应用</string>
+    <!-- Main-screen compatibility warning; module-specific text lives in the JSON asset. -->
+    <string name="compatibility_warning_title">模块兼容性提醒</string>
+    <string name="compatibility_warning_count">检测到 %1$d 个可能冲突的应用</string>
+    <string name="compatibility_warning_intro">检测到以下可能影响 USBManager 的已安装应用。如已启用相关模块或功能，建议按下列方法关闭；已关闭的可以忽略本次提醒。</string>
+    <string name="compatibility_feature">相关功能：%1$s</string>
+    <string name="compatibility_reason">原因：%1$s</string>
+    <string name="compatibility_disable">禁用方法：%1$s</string>
+    <string name="compatibility_show_details">显示更多信息</string>
+    <string name="compatibility_hide_details">收起更多信息</string>
+    <string name="compatibility_restored_catalog_unavailable">当前名单已更新或暂时无法读取，可以关闭此提醒。</string>
 </resources>

@@ -1,5 +1,6 @@
 package com.tiger.usbmanager.ui
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -13,6 +14,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.WindowCompat
+import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -20,13 +22,33 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.tiger.usbmanager.ModuleActivationCheck
 import com.tiger.usbmanager.ModuleSettings
 import com.tiger.usbmanager.R
+import com.tiger.usbmanager.bridge.InstalledPackageCatalog
+import com.tiger.usbmanager.compatibility.CompatibilityConfig
+import com.tiger.usbmanager.compatibility.CompatibilityPolicy
+import com.tiger.usbmanager.compatibility.CompatibilitySnapshotStore
 import com.tiger.usbmanager.policy.UsbMode
+import com.tiger.usbmanager.withDisplayLanguage
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 
-class MainActivity : LocalizedActivity() {
+class MainActivity : FragmentActivity() {
     private lateinit var activationStatusContainer: LinearLayout
     private var defaultConfigSummaryView: TextView? = null
     private var gameDndSummaryView: TextView? = null
     private var hasResumed = false
+    private var mainScreenVisible = false
+    private var mainResumed = false
+    private var compatibilityCheckPending = true
+    private var compatibilityGeneration = 0
+    private var compatibilityTask: Future<*>? = null
+    private val compatibilityHandler = Handler(Looper.getMainLooper())
+    private val compatibilityWorker = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "usb-compatibility-check").apply { isDaemon = true }
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withDisplayLanguage())
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +58,8 @@ class MainActivity : LocalizedActivity() {
     }
 
     private fun showIntro() {
+        mainScreenVisible = false
+        cancelCompatibilityCheck()
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(22), dp(20), dp(28))
@@ -98,6 +122,7 @@ class MainActivity : LocalizedActivity() {
     }
 
     private fun showConfigManager() {
+        mainScreenVisible = true
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(getColor(R.color.bg_page))
@@ -124,6 +149,61 @@ class MainActivity : LocalizedActivity() {
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         refreshActivationStatus()
+        checkCompatibilityOnEntry()
+    }
+
+    private fun checkCompatibilityOnEntry() {
+        if (!mainScreenVisible || !mainResumed || !compatibilityCheckPending ||
+            compatibilityTask != null || isFinishing || isDestroyed || supportFragmentManager.isStateSaved ||
+            supportFragmentManager.findFragmentByTag(CompatibilityWarningDialog.TAG) != null) return
+        compatibilityCheckPending = false
+        val generation = ++compatibilityGeneration
+        val context = applicationContext
+        compatibilityTask = compatibilityWorker.submit {
+            val result = runCatching {
+                // A successful system catalog response is the injection check.
+                // No app-side enumeration or stale activation property is used.
+                val packages = InstalledPackageCatalog.loadPackageNames(context)
+                val modules = CompatibilityConfig.load(context)
+                val previous = CompatibilitySnapshotStore(context).previousPackages()
+                packages to CompatibilityPolicy.newConflicts(packages, previous, modules)
+            }
+            if (Thread.currentThread().isInterrupted) return@submit
+            compatibilityHandler.post {
+                if (generation != compatibilityGeneration || isFinishing || isDestroyed) return@post
+                compatibilityTask = null
+                if (!mainResumed || !mainScreenVisible || supportFragmentManager.isStateSaved) {
+                    compatibilityCheckPending = true
+                    return@post
+                }
+                result.onSuccess { (packages, conflicts) ->
+                    runCatching {
+                        if (conflicts.isNotEmpty()) {
+                            CompatibilityWarningDialog.forPackages(conflicts.map { it.packageName })
+                                .showNow(supportFragmentManager, CompatibilityWarningDialog.TAG)
+                        }
+                        // Record every successful scan, even with no conflicts. The
+                        // warning must be shown before an affected app is recorded.
+                        CompatibilitySnapshotStore(context).record(packages)
+                    }.onFailure {
+                        android.util.Log.w("USBManager", "[COMPAT] Could not show or record compatibility scan", it)
+                    }
+                }.onFailure {
+                    android.util.Log.w("USBManager", "[COMPAT] System package scan unavailable; previous snapshot retained", it)
+                }
+            }
+        }
+    }
+
+    internal fun onCompatibilityWarningDismissed() {
+        compatibilityHandler.post { checkCompatibilityOnEntry() }
+    }
+
+    private fun cancelCompatibilityCheck() {
+        compatibilityGeneration += 1
+        compatibilityTask?.cancel(true)
+        compatibilityTask = null
+        compatibilityHandler.removeCallbacksAndMessages(null)
     }
 
     private fun refreshActivationStatus() {
@@ -361,12 +441,35 @@ class MainActivity : LocalizedActivity() {
             .setView(ScrollView(this).apply { addView(tv) }).setPositiveButton(R.string.dialog_got_it, null).show()
     }
 
+    override fun onStart() {
+        super.onStart()
+        compatibilityCheckPending = true
+    }
+
     override fun onResume() {
         super.onResume()
+        mainResumed = true
         if (hasResumed) {
             defaultConfigSummaryView?.text = defaultConfigSummary()
             gameDndSummaryView?.text = gameDndSummary()
         }
         hasResumed = true
+        checkCompatibilityOnEntry()
+    }
+
+    override fun onPause() {
+        mainResumed = false
+        super.onPause()
+    }
+
+    override fun onStop() {
+        cancelCompatibilityCheck()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        cancelCompatibilityCheck()
+        compatibilityWorker.shutdownNow()
+        super.onDestroy()
     }
 }
