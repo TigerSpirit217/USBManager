@@ -1,6 +1,12 @@
 # USBManager — Android USB 管理模块
 
-[English](README_ENG.md)
+[![Stars](https://img.shields.io/github/stars/TigerSpirit217/USBManager?label=Stars&logo=github)](https://github.com/TigerSpirit217/USBManager)
+[![GitHub Downloads](https://img.shields.io/github/downloads/Xposed-Modules-Repo/com.tiger.usbmanager/total?label=Downloads)](https://github.com/Xposed-Modules-Repo/com.tiger.usbmanager/releases)
+[![License](https://img.shields.io/badge/license-Mulan%20PubL%20v2-blue)](https://license.coscl.org.cn/MulanPubL-2.0)
+[![KernelSU](https://img.shields.io/badge/Root-KernelSU-orange.svg)](https://kernelsu.org)
+[![LSPosed](https://img.shields.io/badge/LSPosed-API%20101%2B-purple.svg)](https://github.com/LSPosed/LSPosed)
+
+中文 | [English](README_ENG.md)
 
 一个基于 **LSPosed** 框架的 Android 系统模块。手机通过数据线连接电脑时，它会显示 USB 选择窗口，让用户决定本次连接的 USB 模式和 ADB 状态。
 
