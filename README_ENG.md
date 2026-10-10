@@ -42,6 +42,7 @@ An Android system module based on the **LSPosed** framework. When the phone is c
 * **ADB off on unplug:** optionally turns USB debugging off when the cable is removed.
 * **Lock-screen deferral:** waits until unlock by default, with an option to display the chooser while locked.
 * **Game Do Not Disturb:** disabled by default; skips the chooser while a selected app is in the foreground and applies Charge only (recommended) or Use default configuration.
+* **Live status page:** switch between Home, Status and Settings using the bottom bar. Status shows the current connection, USB mode and ADB setting, and confirms changes against the system state.
 
 ## Installation
 

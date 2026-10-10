@@ -36,6 +36,7 @@ import com.tiger.usbmanager.policy.UsbMode
 open class UsbChooserActivity : ComponentActivity() {
     protected open val editsDefaultConfiguration: Boolean = false
     private val optionViews = linkedMapOf<UsbMode, ModeViews>()
+    private val optionColorAnimations = mutableMapOf<UsbMode, ValueAnimator>()
     private var selectedMode = UsbMode.MTP
     private var token = 0
     private var outcomeReported = false
@@ -51,10 +52,12 @@ open class UsbChooserActivity : ComponentActivity() {
     }
 
     override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(newBase.withDisplayLanguage())
+        super.attachBaseContext(DisplaySettings.wrapContext(newBase.withDisplayLanguage()))
+        applyOverrideConfiguration(DisplaySettings.nightConfiguration())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        DisplaySettings.apply(this)
         super.onCreate(savedInstanceState)
         if (editsDefaultConfiguration) ModuleSettings.init(this)
         token = intent?.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0) ?: 0
@@ -85,6 +88,8 @@ open class UsbChooserActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        optionColorAnimations.values.forEach { it.cancel() }
+        chooserCard.animate().cancel()
         if (!editsDefaultConfiguration) reportOutcome("dismissed")
         super.onDestroy()
     }
@@ -126,10 +131,18 @@ open class UsbChooserActivity : ComponentActivity() {
     }
 
     private fun bindViews() {
+        optionColorAnimations.values.forEach { it.cancel() }
+        optionColorAnimations.clear()
         optionViews.clear()
         chooserCard = findViewById(R.id.chooser_card)
+        applyXmlPalette(chooserCard)
         adbSwitch = findViewById(R.id.adb_switch)
         adbSwitch.useUsbManagerColors()
+        chooserCard.setCardBackgroundColor(uiColor(R.color.usb_surface))
+        findViewById<TextView>(R.id.chooser_heading).setTextColor(uiColor(R.color.usb_text_primary))
+        findViewById<TextView>(R.id.chooser_subtitle).setTextColor(uiColor(R.color.usb_text_secondary))
+        findViewById<TextView>(R.id.chooser_footer_hint).setTextColor(uiColor(R.color.usb_text_tertiary))
+        findViewById<MaterialCardView>(R.id.adb_option).setCardBackgroundColor(uiColor(R.color.usb_adb_background))
         val definitions = listOf(
             ModeDefinition(UsbMode.CHARGING, R.id.option_charging, R.drawable.ic_battery_charging, R.string.chooser_mode_charging_description),
             ModeDefinition(UsbMode.MTP, R.id.option_mtp, R.drawable.ic_folder_transfer, R.string.chooser_mode_mtp_description),
@@ -142,7 +155,10 @@ open class UsbChooserActivity : ComponentActivity() {
             val icon = card.findViewById<ImageView>(R.id.mode_icon)
             val indicator = card.findViewById<View>(R.id.mode_indicator)
             icon.setImageResource(definition.iconRes)
-            card.findViewById<TextView>(R.id.mode_title).setText(definition.mode.displayRes)
+            card.findViewById<TextView>(R.id.mode_title).apply {
+                setText(definition.mode.displayRes); setTextColor(uiColor(R.color.usb_text_primary))
+            }
+            card.findViewById<TextView>(R.id.mode_subtitle).setTextColor(uiColor(R.color.usb_text_secondary))
             card.findViewById<TextView>(R.id.mode_subtitle).setText(definition.descriptionRes)
             optionViews[definition.mode] = ModeViews(card, icon, indicator)
             card.setOnClickListener {
@@ -201,33 +217,58 @@ open class UsbChooserActivity : ComponentActivity() {
         selectMode(mode, animate = false)
     }
 
+    private fun applyXmlPalette(view: View) {
+        // Also covers API 26–29, where Android does not support ResourcesLoader.
+        if (view is ImageView) {
+            view.imageTintList = android.content.res.ColorStateList.valueOf(uiColor(R.color.usb_accent))
+            if (view.background != null) view.background = roundedBackground(R.color.accent_soft, 16)
+        }
+        if (view is TextView && view !is MaterialButton) {
+            listOf(R.color.usb_text_primary, R.color.usb_text_secondary, R.color.usb_text_tertiary).firstOrNull {
+                view.currentTextColor == getColor(it)
+            }?.let { view.setTextColor(uiColor(it)) }
+        }
+        if (view is ViewGroup) for (i in 0 until view.childCount) applyXmlPalette(view.getChildAt(i))
+    }
+
     private fun selectMode(mode: UsbMode, animate: Boolean) {
         selectedMode = mode
         optionViews.forEach { (itemMode, views) ->
+            optionColorAnimations.remove(itemMode)?.cancel()
             val selected = itemMode == mode
-            val target = getColor(if (selected) R.color.usb_option_selected else R.color.usb_option_normal)
+            val target = uiColor(if (selected) R.color.usb_option_selected else R.color.usb_option_normal)
             val current = views.card.cardBackgroundColor.defaultColor
-            if (animate && current != target) {
-                ValueAnimator.ofObject(ArgbEvaluator(), current, target).apply {
+            if (animate && UiMotion.enabled() && current != target) {
+                optionColorAnimations[itemMode] = ValueAnimator.ofObject(ArgbEvaluator(), current, target).apply {
                     duration = 180
                     addUpdateListener { views.card.setCardBackgroundColor(it.animatedValue as Int) }
                     start()
                 }
             } else views.card.setCardBackgroundColor(target)
             views.card.strokeWidth = dp(if (selected) 2 else 1)
-            views.card.strokeColor = getColor(if (selected) R.color.usb_accent else R.color.usb_option_border)
-            views.icon.setColorFilter(getColor(if (selected) R.color.usb_accent else R.color.usb_icon_inactive))
+            views.card.strokeColor = uiColor(if (selected) R.color.usb_accent else R.color.usb_option_border)
+            views.icon.setColorFilter(uiColor(if (selected) R.color.usb_accent else R.color.usb_icon_inactive))
             views.indicator.isSelected = selected
+            views.indicator.background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(if (selected) uiColor(R.color.usb_accent) else android.graphics.Color.TRANSPARENT)
+                if (!selected) setStroke(dp(2), uiColor(R.color.usb_indicator_inactive))
+            }
             views.indicator.animate()
                 .scaleX(if (selected) 1f else 0.72f)
                 .scaleY(if (selected) 1f else 0.72f)
                 .alpha(if (selected) 1f else 0.55f)
-                .setDuration(if (animate) 180 else 0)
+                .setDuration(if (animate && UiMotion.enabled()) 180 else 0)
                 .start()
         }
     }
 
     private fun playEntranceAnimation() {
+        chooserCard.animate().cancel()
+        if (!UiMotion.enabled()) {
+            chooserCard.alpha = 1f; chooserCard.scaleX = 1f; chooserCard.scaleY = 1f; chooserCard.translationY = 0f
+            return
+        }
         chooserCard.alpha = 0f
         chooserCard.scaleX = 0.94f
         chooserCard.scaleY = 0.94f
@@ -240,6 +281,8 @@ open class UsbChooserActivity : ComponentActivity() {
         if (closing) return
         closing = true
         if (outcome != null && !editsDefaultConfiguration) reportOutcome(outcome)
+        chooserCard.animate().cancel()
+        if (!UiMotion.enabled()) { finish(); return }
         chooserCard.animate().alpha(0f).scaleX(0.96f).scaleY(0.96f).translationY(dp(14).toFloat())
             .setDuration(170).setInterpolator(DecelerateInterpolator())
             .withEndAction { finish() }.start()

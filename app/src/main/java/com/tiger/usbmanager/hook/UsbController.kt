@@ -64,11 +64,11 @@ internal class UsbController(private val env: HookEnv) {
             return false
         }
 
-        // 1) Modern bitmask API on UsbDeviceManager. Skip entirely if the
-        //    UsbManager.FUNCTION_* reflection lookup returned empty (we'd
-        //    otherwise call setCurrentFunctions(0L) which itself throws IAE).
+        // 1) Modern bitmask API on UsbDeviceManager. Missing constants use
+        //    the legacy fallback; the valid zero mask is reserved for charging
+        //    and must never be substituted for an unrecognized data mode.
         val modeBit = functionBits[mode]
-        if (modeBit != null && modeBit != 0L) {
+        if (modeBit != null) {
             if (callSetCurrentFunctions(manager, modeBit)) return true
         }
 
@@ -122,7 +122,29 @@ internal class UsbController(private val env: HookEnv) {
 
     // ---- Framework API attempts ----
 
+    /** The requested current mask is authoritative: 0 is charging even if the gadget advertises MTP. */
+    fun currentFunctions(): String? {
+        val cls = env.classLoader.findClassOrNull("android.hardware.usb.UsbManager") ?: return null
+        val stringify = cls.methodOrNull("usbFunctionsToString", Long::class.javaPrimitiveType!!) ?: return null
+        val targets = listOfNotNull(usbDeviceManager, env.systemContext?.getSystemService("usb"))
+        for (target in targets) {
+            val value = runCatching {
+                (target.javaClass.methodOrNull("getCurrentFunctions")?.invoke(target) as? Number)?.toLong()
+            }.getOrNull() ?: continue
+            return runCatching { stringify.invoke(null, value) as? String }.getOrNull()
+        }
+        return null
+    }
+
     private fun callSetCurrentFunctions(manager: Any, functions: Long): Boolean {
+        val withOperation = manager.javaClass.methodOrNull("setCurrentFunctions",
+            Long::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!)
+        if (withOperation != null) {
+            return runCatching {
+                withOperation.invoke(manager, functions, operationId.incrementAndGet())
+                true
+            }.onFailure { env.warn("setCurrentFunctions(long,int) failed functions=$functions", it) }.getOrDefault(false)
+        }
         // setCurrentFunctions(long) or setCurrentFunctions(long, boolean)
         val withBool = manager.javaClass.methodOrNull(
             "setCurrentFunctions",
@@ -242,6 +264,11 @@ internal class UsbController(private val env: HookEnv) {
         }
         val map = mutableMapOf<UsbMode, Long>()
         UsbMode.entries.forEach { mode ->
+            if (mode == UsbMode.CHARGING) {
+                // FUNCTION_NONE=0 is the documented charging mask; FUNCTION_CHARGING does not exist on AOSP.
+                map[mode] = 0L
+                return@forEach
+            }
             val fieldName = if (mode == UsbMode.CHARGING) "FUNCTION_CHARGING"
                 else "FUNCTION_${mode.wireValue.uppercase(Locale.ROOT)}"
             val bit = cls.staticLongFieldOrNull(fieldName)
@@ -266,6 +293,8 @@ internal class UsbController(private val env: HookEnv) {
         }
         return map
     }
+
+    private val operationId = java.util.concurrent.atomic.AtomicInteger()
 
     // ---- SystemProperties helper ----
 

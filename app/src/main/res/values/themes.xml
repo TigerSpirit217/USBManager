@@ -1,14 +1,39 @@
 <resources>
-    <style name="Theme.USBManager" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="ThemeOverlay.USBManager.Colors" parent="">
         <item name="colorPrimary">@color/usb_accent</item>
-        <item name="colorPrimaryVariant">@color/usb_accent_pressed</item>
         <item name="colorSecondary">@color/usb_accent</item>
         <item name="colorOnPrimary">@color/on_usb_accent</item>
-        <item name="android:colorAccent">@color/usb_accent</item>
-        <item name="colorControlActivated">@color/usb_accent</item>
-        <item name="android:colorControlActivated">@color/usb_accent</item>
-        <item name="colorControlHighlight">@color/usb_accent_soft</item>
-        <item name="android:colorControlHighlight">@color/usb_accent_soft</item>
+        <item name="colorSurface">@color/bg_card</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="android:colorBackground">@color/bg_page</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+    </style>
+    <style name="ThemeOverlay.USBManager.Colors.Light" parent="ThemeOverlay.USBManager.Colors">
+        <item name="isLightTheme">true</item>
+    </style>
+    <style name="ThemeOverlay.USBManager.Colors.Dark" parent="ThemeOverlay.USBManager.Colors">
+        <item name="isLightTheme">false</item>
+    </style>
+    <style name="Theme.USBManager" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="appAccent">@color/usb_accent</item>
+        <item name="appAccentPressed">@color/usb_accent_pressed</item>
+        <item name="appOnAccent">@color/on_usb_accent</item>
+        <item name="appAccentSoft">@color/usb_accent_soft</item>
+        <item name="appOnAccentSoft">@color/on_accent_soft</item>
+
+        <item name="colorSurface">@color/bg_card</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="android:colorBackground">@color/bg_page</item>
+        <item name="colorPrimary">?attr/appAccent</item>
+        <item name="colorPrimaryVariant">?attr/appAccentPressed</item>
+        <item name="colorSecondary">?attr/appAccent</item>
+        <item name="colorOnPrimary">?attr/appOnAccent</item>
+        <item name="android:colorAccent">?attr/appAccent</item>
+        <item name="colorControlActivated">?attr/appAccent</item>
+        <item name="android:colorControlActivated">?attr/appAccent</item>
+        <item name="colorControlHighlight">?attr/appAccentSoft</item>
+        <item name="android:colorControlHighlight">?attr/appAccentSoft</item>
         <item name="android:buttonTint">@color/control_button_tint</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@color/bg_page</item>
@@ -18,22 +43,34 @@
     </style>
 
     <style name="ThemeOverlay.USBManager.AlertDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
-        <item name="colorPrimary">@color/usb_accent</item>
-        <item name="colorSecondary">@color/usb_accent</item>
-        <item name="colorControlActivated">@color/usb_accent</item>
-        <item name="android:colorControlActivated">@color/usb_accent</item>
+        <item name="colorSurface">@color/bg_card</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="android:colorBackground">@color/bg_page</item>
+        <item name="colorPrimary">?attr/appAccent</item>
+        <item name="colorSecondary">?attr/appAccent</item>
+        <item name="colorControlActivated">?attr/appAccent</item>
+        <item name="android:colorControlActivated">?attr/appAccent</item>
     </style>
 
     <style name="Theme.USBManager.Dialog" parent="Theme.MaterialComponents.DayNight.Dialog.Alert">
-        <item name="colorPrimary">@color/usb_accent</item>
-        <item name="colorPrimaryVariant">@color/usb_accent_pressed</item>
-        <item name="colorSecondary">@color/usb_accent</item>
-        <item name="colorOnPrimary">@color/on_usb_accent</item>
-        <item name="android:colorAccent">@color/usb_accent</item>
-        <item name="colorControlActivated">@color/usb_accent</item>
-        <item name="android:colorControlActivated">@color/usb_accent</item>
-        <item name="colorControlHighlight">@color/usb_accent_soft</item>
-        <item name="android:colorControlHighlight">@color/usb_accent_soft</item>
+        <item name="appAccent">@color/usb_accent</item>
+        <item name="appAccentPressed">@color/usb_accent_pressed</item>
+        <item name="appOnAccent">@color/on_usb_accent</item>
+        <item name="appAccentSoft">@color/usb_accent_soft</item>
+        <item name="appOnAccentSoft">@color/on_accent_soft</item>
+
+        <item name="colorSurface">@color/bg_card</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="android:colorBackground">@color/bg_page</item>
+        <item name="colorPrimary">?attr/appAccent</item>
+        <item name="colorPrimaryVariant">?attr/appAccentPressed</item>
+        <item name="colorSecondary">?attr/appAccent</item>
+        <item name="colorOnPrimary">?attr/appOnAccent</item>
+        <item name="android:colorAccent">?attr/appAccent</item>
+        <item name="colorControlActivated">?attr/appAccent</item>
+        <item name="android:colorControlActivated">?attr/appAccent</item>
+        <item name="colorControlHighlight">?attr/appAccentSoft</item>
+        <item name="android:colorControlHighlight">?attr/appAccentSoft</item>
         <item name="android:buttonTint">@color/control_button_tint</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>

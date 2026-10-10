@@ -43,7 +43,10 @@ internal class SystemServerReceiver(
                 intent.getStringExtra("android.intent.extra.PACKAGE_NAME")
             }.getOrNull()
             val callingUid = runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (action in listOf(ModuleConstants.ACTION_APPLY_LIVE_CONFIG, ModuleConstants.ACTION_QUERY_STATUS) &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    sentFromUid
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     android.os.Binder.getCallingUidOrThrow()
                 } else {
                     android.os.Binder.getCallingUid()
@@ -75,6 +78,7 @@ internal class SystemServerReceiver(
             //       actions, not the public system ACTION_USB_STATE broadcast). -----
             if (action in listOf(
                     ModuleConstants.ACTION_APPLY_USB_CONFIG,
+                    ModuleConstants.ACTION_APPLY_LIVE_CONFIG,
                     ModuleConstants.ACTION_CHOOSER_CLOSED,
                     ModuleConstants.ACTION_QUERY_STATUS,
                     ModuleConstants.ACTION_REQUEST_PACKAGE_NAMES,
@@ -88,14 +92,41 @@ internal class SystemServerReceiver(
                     )
                     return
                 }
-                env.info("[RX] bridge-token OK for $action")
+                if (action != ModuleConstants.ACTION_QUERY_STATUS) env.info("[RX] bridge-token OK for $action")
             }
 
-            env.info("[RX] Broadcast received action=$action callerPkg=$callerPkg callingUid=$callingUid")
+            if (action != ModuleConstants.ACTION_QUERY_STATUS)
+                env.info("[RX] Broadcast received action=$action callerPkg=$callerPkg callingUid=$callingUid")
             when (action) {
                 ModuleConstants.ACTION_APPLY_USB_CONFIG -> handleApply(intent)
+                ModuleConstants.ACTION_APPLY_LIVE_CONFIG -> {
+                    if (!isOrderedBroadcast) return
+                    val pending = goAsync()
+                    val modeWire = intent.getStringExtra(ModuleConstants.EXTRA_USB_MODE)
+                    val mode = UsbMode.entries.firstOrNull { it.wireValue == modeWire }
+                    val adb = intent.getBooleanExtra(ModuleConstants.EXTRA_ADB_ENABLED, false)
+                    val adbOnly = intent.getBooleanExtra(ModuleConstants.EXTRA_ADB_ONLY, false)
+                    Handler(Looper.getMainLooper()).post {
+                        try {
+                            val applied = mode != null && runCatching {
+                                if (adbOnly) controller.setAdbEnabled(adb) else controller.applyConfig(mode, adb)
+                            }.onFailure { env.error("[RX] Live USB update failed", it) }.getOrDefault(false)
+                            if (applied) watcher?.onChooserApplied(mode, adb)
+                            pending.resultCode = if (applied) ModuleConstants.RESULT_LIVE_APPLIED
+                                else ModuleConstants.RESULT_LIVE_FAILED
+                        } finally {
+                            pending.finish()
+                        }
+                    }
+                }
                 ModuleConstants.ACTION_CHOOSER_CLOSED -> handleChooserClosed(intent)
-                ModuleConstants.ACTION_QUERY_STATUS -> env.info("[RX] QUERY_STATUS ping received (no-op)")
+                ModuleConstants.ACTION_QUERY_STATUS -> {
+                    if (!isOrderedBroadcast) return
+                    val functions = controller.currentFunctions() ?: return
+                    setResult(ModuleConstants.RESULT_STATUS_AVAILABLE, null, android.os.Bundle().apply {
+                        putString(ModuleConstants.EXTRA_USB_FUNCTIONS, functions)
+                    })
+                }
                 ModuleConstants.ACTION_REQUEST_PACKAGE_NAMES -> {
                     val request = intent.getStringExtra(com.tiger.usbmanager.bridge.UsbBridgeContract.KEY_PACKAGE_REQUEST).orEmpty()
                     packageWorker.execute {
@@ -109,12 +140,14 @@ internal class SystemServerReceiver(
         }
     }
 
+    @android.annotation.SuppressLint("UnspecifiedRegisterReceiverFlag") // Flags are passed on API 33+ below.
     fun register(context: Context) {
         // 1) Internal bridge receiver.
         //    NOTE: NO permission arg on registerReceiver; trust is established
         //    via EXTRA_BRIDGE_TOKEN inside each intent (see class KDoc).
         val bridgeFilter = IntentFilter().apply {
             addAction(ModuleConstants.ACTION_APPLY_USB_CONFIG)
+            addAction(ModuleConstants.ACTION_APPLY_LIVE_CONFIG)
             addAction(ModuleConstants.ACTION_CHOOSER_CLOSED)
             addAction(ModuleConstants.ACTION_QUERY_STATUS)
             addAction(ModuleConstants.ACTION_REQUEST_PACKAGE_NAMES)

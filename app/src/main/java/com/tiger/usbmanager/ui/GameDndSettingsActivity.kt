@@ -36,7 +36,7 @@ class GameDndSettingsActivity : LocalizedActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.bg_page))
+            setBackgroundColor(uiColor(R.color.bg_page))
             applySystemBarPadding(includeHorizontal = true)
             addView(toolbar(getString(R.string.game_dnd_title), back = { finish() }).apply {
                 applySystemBarPadding(includeTop = true)
@@ -76,7 +76,7 @@ class GameDndSettingsActivity : LocalizedActivity() {
             addView(TextView(context).apply {
                 setText(R.string.game_dnd_enable)
                 textSize = 15f
-                setTextColor(getColor(R.color.text_primary))
+                setTextColor(uiColor(R.color.text_primary))
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(SwitchMaterial(context).apply {
                 useUsbManagerColors()
@@ -84,6 +84,8 @@ class GameDndSettingsActivity : LocalizedActivity() {
                 setOnCheckedChangeListener { _, enabled ->
                     ModuleSettings.prefs().edit { putBoolean(ModuleSettings.KEY_GAME_DND_ENABLED, enabled) }
                     if (!enabled) riskDialog?.cancel()
+                    if (UiMotion.enabled()) android.transition.TransitionManager.beginDelayedTransition(
+                        advancedSettings.parent as ViewGroup, android.transition.AutoTransition().setDuration(220))
                     advancedSettings.visibility = if (enabled) View.VISIBLE else View.GONE
                 }
             })
@@ -115,8 +117,8 @@ class GameDndSettingsActivity : LocalizedActivity() {
         id = viewId
         setText(res)
         textSize = 15f
-        setTextColor(getColor(R.color.text_primary))
-        buttonTintList = AppCompatResources.getColorStateList(context, R.color.control_button_tint)
+        setTextColor(uiColor(R.color.text_primary))
+        buttonTintList = context.controlColors()
         minHeight = dp(52)
     }
 
@@ -148,7 +150,7 @@ class GameDndSettingsActivity : LocalizedActivity() {
             }
         riskDialog?.apply {
             show()
-            findViewById<TextView>(android.R.id.message)?.setTextColor(getColor(R.color.game_dnd_warning))
+            findViewById<TextView>(android.R.id.message)?.setTextColor(uiColor(R.color.game_dnd_warning))
         }
     }
 
@@ -170,25 +172,25 @@ class GameDndSettingsActivity : LocalizedActivity() {
                     addView(TextView(context).apply {
                         setText(R.string.game_dnd_picker_title)
                         textSize = 15f
-                        setTextColor(getColor(R.color.text_primary))
+                        setTextColor(uiColor(R.color.text_primary))
                     })
                     packagesSummary = TextView(context).apply {
                         textSize = 12f
-                        setTextColor(getColor(R.color.usb_text_secondary))
+                        setTextColor(uiColor(R.color.usb_text_secondary))
                         setPadding(0, dp(3), 0, 0)
                     }
                     addView(packagesSummary)
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(ImageView(context).apply {
                     setImageResource(R.drawable.ic_arrow_forward)
-                    imageTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.usb_accent))
+                    imageTintList = android.content.res.ColorStateList.valueOf(uiColor(R.color.usb_accent))
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(12) })
             })
             addView(divider())
             addView(bodyText(R.string.game_dnd_apps_hint).apply {
                 textSize = 12f
-                setTextColor(getColor(R.color.text_secondary))
+                setTextColor(uiColor(R.color.text_secondary))
                 setPadding(dp(16), dp(12), dp(16), dp(14))
             })
         })
@@ -197,7 +199,7 @@ class GameDndSettingsActivity : LocalizedActivity() {
     private fun bodyText(res: Int) = TextView(this).apply {
         setText(res)
         textSize = 12f
-        setTextColor(getColor(R.color.text_secondary))
+        setTextColor(uiColor(R.color.text_secondary))
         setLineSpacing(0f, 1.18f)
     }
 

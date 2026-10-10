@@ -1,0 +1,7 @@
+<resources>
+    <attr name="appAccent" format="color" />
+    <attr name="appAccentPressed" format="color" />
+    <attr name="appOnAccent" format="color" />
+    <attr name="appAccentSoft" format="color" />
+    <attr name="appOnAccentSoft" format="color" />
+</resources>

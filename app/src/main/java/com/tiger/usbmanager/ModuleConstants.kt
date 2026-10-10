@@ -20,9 +20,16 @@ object ModuleConstants {
 
     /** Apply a USB configuration chosen by the user. */
     const val ACTION_APPLY_USB_CONFIG = "$MODULE_PACKAGE.action.APPLY_USB_CONFIG"
+    /** Ordered request from the status page, acknowledged by the live runtime. */
+    const val ACTION_APPLY_LIVE_CONFIG = "$MODULE_PACKAGE.action.APPLY_LIVE_CONFIG"
+    const val EXTRA_ADB_ONLY = "adb_only"
+    const val RESULT_LIVE_APPLIED = 1
+    const val RESULT_LIVE_FAILED = 2
 
-    /** Query current USB host / status (debug aid). */
+    /** Ordered query of current framework functions, including the zero/charging mask. */
     const val ACTION_QUERY_STATUS = "$MODULE_PACKAGE.action.QUERY_STATUS"
+    const val RESULT_STATUS_AVAILABLE = 3
+    const val EXTRA_USB_FUNCTIONS = "current_usb_functions"
     const val ACTION_REQUEST_PACKAGE_NAMES = "$MODULE_PACKAGE.action.REQUEST_PACKAGE_NAMES"
 
     /** Sent when the chooser activity is closed (via any path: confirmed / cancelled / dismissed). */

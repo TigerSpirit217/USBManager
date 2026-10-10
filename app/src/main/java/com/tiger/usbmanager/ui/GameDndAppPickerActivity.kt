@@ -63,7 +63,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
         initiallySelected = savedInstanceState?.getStringArrayList("initial_selection")?.toSet() ?: selected.toSet()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.bg_page))
+            setBackgroundColor(uiColor(R.color.bg_page))
             applySystemBarPadding(includeHorizontal = true)
         }
         val heading = toolbar(getString(R.string.game_dnd_picker_title), back = { finish() }).apply {
@@ -75,8 +75,8 @@ class GameDndAppPickerActivity : LocalizedActivity() {
         root.addView(heading)
         search = EditText(this).apply {
             setHint(R.string.game_dnd_search)
-            setTextColor(getColor(R.color.text_primary))
-            setHintTextColor(getColor(R.color.text_tertiary))
+            setTextColor(uiColor(R.color.text_primary))
+            setHintTextColor(uiColor(R.color.text_tertiary))
             isSingleLine = true
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_FILTER
             setPadding(dp(14), dp(10), dp(14), dp(10))
@@ -93,13 +93,13 @@ class GameDndAppPickerActivity : LocalizedActivity() {
             setText(R.string.game_dnd_loading)
             textSize = 14f
             gravity = Gravity.CENTER
-            setTextColor(getColor(R.color.on_accent_soft))
+            setTextColor(uiColor(R.color.on_accent_soft))
             background = roundedBackground(R.color.accent_soft, 16)
             setPadding(dp(16), dp(14), dp(16), dp(14))
         }
         list = ListView(this).apply {
             adapter = appAdapter
-            divider = ColorDrawable(getColor(R.color.outline))
+            divider = ColorDrawable(uiColor(R.color.outline))
             dividerHeight = dp(1)
             setOnItemClickListener { _, _, position, _ ->
                 val name = visiblePackages[position].packageName
@@ -156,7 +156,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
                     filter()
                 }.onFailure {
                     status.setText(R.string.game_dnd_load_failed)
-                    status.setTextColor(getColor(R.color.game_dnd_warning))
+                    status.setTextColor(uiColor(R.color.game_dnd_warning))
                     status.background = roundedBackground(R.color.banner_inactive_bg, 16)
                 }
             }
@@ -187,16 +187,19 @@ class GameDndAppPickerActivity : LocalizedActivity() {
 
     private fun toolbarAction(icon: Int, description: Int, click: (View) -> Unit) = ImageView(this).apply {
         setImageResource(icon)
-        imageTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.text_primary))
+        imageTintList = android.content.res.ColorStateList.valueOf(uiColor(R.color.text_primary))
         contentDescription = getString(description)
         scaleType = ImageView.ScaleType.CENTER
         setPadding(dp(10), dp(10), dp(10), dp(10))
         background = roundedBackground(R.color.surface_variant, 16)
         isFocusable = true
+        clickFeedback()
         setOnClickListener { click(it) }
     }
 
     private fun toggleSearch(show: Boolean = searchPanel.visibility != View.VISIBLE, requestKeyboard: Boolean = true) {
+        if (UiMotion.enabled()) android.transition.TransitionManager.beginDelayedTransition(
+            searchPanel.parent as ViewGroup, android.transition.AutoTransition().setDuration(180))
         searchPanel.visibility = if (show) View.VISIBLE else View.GONE
         searchAction.setImageResource(if (show) R.drawable.ic_close else R.drawable.ic_search)
         searchAction.contentDescription = getString(if (show) R.string.game_dnd_close_search else R.string.game_dnd_search_action)
@@ -246,12 +249,12 @@ class GameDndAppPickerActivity : LocalizedActivity() {
                 val texts = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
                 val label = TextView(context).apply {
                     textSize = 16f
-                    setTextColor(getColor(R.color.text_primary))
+                    setTextColor(uiColor(R.color.text_primary))
                 }
                 val packageName = TextView(context).apply {
                     textSize = 12f
                     typeface = Typeface.MONOSPACE
-                    setTextColor(getColor(R.color.text_secondary))
+                    setTextColor(uiColor(R.color.text_secondary))
                     setPadding(0, dp(3), 0, 0)
                 }
                 texts.addView(label)
@@ -271,7 +274,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
             views.label.text = app.label
             views.packageName.text = app.packageName
             views.check.isChecked = app.packageName in selected
-            row.setBackgroundColor(getColor(if (views.check.isChecked) R.color.usb_accent_soft else R.color.bg_card))
+            row.setBackgroundColor(uiColor(if (views.check.isChecked) R.color.usb_accent_soft else R.color.bg_card))
             bindIcon(app, views.icon)
             return row
         }

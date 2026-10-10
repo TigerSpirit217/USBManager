@@ -45,7 +45,7 @@
                         android:background="@drawable/bg_usb_header_icon"
                         android:contentDescription="@null"
                         android:src="@drawable/ic_usb_connection"
-                        app:tint="@color/usb_accent" />
+                        app:tint="?attr/appAccent" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -96,7 +96,7 @@
                     android:clickable="true"
                     android:focusable="true"
                     android:foreground="?attr/selectableItemBackground"
-                    app:cardBackgroundColor="@color/usb_adb_background"
+                    app:cardBackgroundColor="?attr/appAccentSoft"
                     app:cardCornerRadius="17dp"
                     app:cardElevation="0dp">
                     <LinearLayout
@@ -107,7 +107,7 @@
                         android:orientation="horizontal"
                         android:paddingStart="16dp"
                         android:paddingEnd="10dp">
-                        <ImageView android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="@null" android:src="@drawable/ic_terminal" app:tint="@color/usb_accent" />
+                        <ImageView android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="@null" android:src="@drawable/ic_terminal" app:tint="?attr/appAccent" />
                         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="13dp" android:layout_weight="1" android:orientation="vertical">
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium" android:text="@string/chooser_adb" android:textColor="@color/usb_text_primary" android:textSize="15sp" />
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/chooser_adb_description" android:textColor="@color/usb_text_secondary" android:textSize="12sp" />
@@ -157,13 +157,13 @@
                         android:minWidth="112dp"
                         android:text="@string/chooser_confirm"
                         android:textAllCaps="false"
-                        android:textColor="@color/on_usb_accent"
+                        android:textColor="?attr/appOnAccent"
                         app:backgroundTint="@color/primary_button_tint"
                         app:cornerRadius="15dp"
                         app:icon="@drawable/ic_arrow_forward"
                         app:iconGravity="textEnd"
                         app:iconPadding="7dp"
-                        app:iconTint="@color/on_usb_accent" />
+                        app:iconTint="?attr/appOnAccent" />
                 </LinearLayout>
             </LinearLayout>
         </ScrollView>

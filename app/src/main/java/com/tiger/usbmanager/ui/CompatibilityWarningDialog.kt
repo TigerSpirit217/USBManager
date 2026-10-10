@@ -84,11 +84,11 @@ class CompatibilityWarningDialog : DialogFragment() {
                     backgroundTintList = ColorStateList(arrayOf(
                         intArrayOf(android.R.attr.state_pressed), intArrayOf(),
                     ), intArrayOf(
-                        context.getColor(R.color.compatibility_accent_pressed),
-                        context.getColor(R.color.compatibility_accent),
+                        context.uiColor(R.color.compatibility_accent_pressed),
+                        context.uiColor(R.color.compatibility_accent),
                     ))
-                    setTextColor(context.getColor(R.color.compatibility_on_accent))
-                    rippleColor = ColorStateList.valueOf(context.getColor(R.color.compatibility_ripple))
+                    setTextColor(context.uiColor(R.color.compatibility_on_accent))
+                    rippleColor = ColorStateList.valueOf(context.uiColor(R.color.compatibility_ripple))
                     setOnClickListener { dismiss() }
                 }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)))
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -98,7 +98,7 @@ class CompatibilityWarningDialog : DialogFragment() {
             radius = dp(28).toFloat()
             cardElevation = dp(18).toFloat()
             strokeWidth = 0
-            setCardBackgroundColor(context.getColor(R.color.compatibility_surface))
+            setCardBackgroundColor(context.uiColor(R.color.compatibility_surface))
             addView(column)
         }
         return Dialog(context, R.style.Theme_USBManager_Dialog).apply { setContentView(card) }
@@ -121,7 +121,7 @@ class CompatibilityWarningDialog : DialogFragment() {
         gravity = Gravity.CENTER_VERTICAL
         addView(ImageView(context).apply {
             setImageResource(R.drawable.ic_compatibility_warning)
-            imageTintList = ColorStateList.valueOf(context.getColor(R.color.compatibility_accent))
+            imageTintList = ColorStateList.valueOf(context.uiColor(R.color.compatibility_accent))
             background = context.roundedBackground(R.color.compatibility_icon_background, 14)
             setPadding(dp(12), dp(12), dp(12), dp(12))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -162,7 +162,7 @@ class CompatibilityWarningDialog : DialogFragment() {
             addView(bodyText(getString(R.string.compatibility_reason, module.briefReason.forLanguage(language)))
                 .apply { setPadding(0, dp(6), 0, dp(12)) })
             addView(View(context).apply {
-                setBackgroundColor(context.getColor(R.color.compatibility_outline))
+                setBackgroundColor(context.uiColor(R.color.compatibility_outline))
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
             addView(bodyText(getString(R.string.compatibility_disable, module.disableInstructions.forLanguage(language)))
                 .apply { setPadding(0, dp(12), 0, 0) })
@@ -179,15 +179,17 @@ class CompatibilityWarningDialog : DialogFragment() {
                 textSize = 13f
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
-                setTextColor(context.getColor(R.color.compatibility_accent))
+                setTextColor(context.uiColor(R.color.compatibility_accent))
                 minHeight = dp(48)
                 gravity = Gravity.CENTER_VERTICAL
                 isFocusable = true
-                background = RippleDrawable(ColorStateList.valueOf(context.getColor(R.color.compatibility_ripple)),
+                background = RippleDrawable(ColorStateList.valueOf(context.uiColor(R.color.compatibility_ripple)),
                     null, context.roundedBackground(R.color.compatibility_module_surface, 8))
                 setOnClickListener {
                     val expanded = expandedPackages.add(module.packageName)
                     if (!expanded) expandedPackages.remove(module.packageName)
+                    if (UiMotion.enabled()) android.transition.TransitionManager.beginDelayedTransition(
+                        detail.parent as ViewGroup, android.transition.AutoTransition().setDuration(220))
                     detail.visibility = if (expanded) View.VISIBLE else View.GONE
                     updateLabel()
                 }
@@ -195,8 +197,8 @@ class CompatibilityWarningDialog : DialogFragment() {
             addView(detail)
         }
         return context.surfaceCard().apply {
-            setCardBackgroundColor(context.getColor(R.color.compatibility_module_surface))
-            strokeColor = context.getColor(R.color.compatibility_outline)
+            setCardBackgroundColor(context.uiColor(R.color.compatibility_module_surface))
+            strokeColor = context.uiColor(R.color.compatibility_outline)
             addView(column)
         }
     }
@@ -204,7 +206,7 @@ class CompatibilityWarningDialog : DialogFragment() {
     private fun bodyText(value: String, color: Int = R.color.compatibility_text_primary) = TextView(requireContext()).apply {
         text = value
         textSize = 14f
-        setTextColor(context.getColor(color))
+        setTextColor(context.uiColor(color))
         setLineSpacing(0f, 1.18f)
         setTextIsSelectable(true)
     }

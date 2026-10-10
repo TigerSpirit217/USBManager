@@ -43,6 +43,7 @@ object UsbConfigSender {
      *  set flags the system doesn't recognise (they're masked off). */
     private const val FLAG_RECEIVER_INCLUDE_BACKGROUND_FALLBACK: Int = 0x01000000 or 0x00800000
 
+    @android.annotation.SuppressLint("WrongConstant") // Includes framework-internal receiver flags for OEM delivery.
     fun apply(
         context: Context,
         mode: UsbMode,
@@ -89,6 +90,7 @@ object UsbConfigSender {
      *
      * This lets the watcher stop its pending-apply poll when the user did not confirm.
      */
+    @android.annotation.SuppressLint("WrongConstant") // Same internal flags as the apply broadcast.
     fun sendChooserClosed(
         context: Context,
         token: Int,

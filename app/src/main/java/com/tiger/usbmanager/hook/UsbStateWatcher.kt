@@ -568,6 +568,7 @@ internal class UsbStateWatcher(
         }.onFailure { env.warn("[WATCHER] failed to send DISMISS_CHOOSER", it) }
     }
 
+    @SuppressLint("MissingPermission") // Runs with system_server's UID and notification permissions.
     private fun launchChooser(ctx: Context, request: ChooserRequest) {
         // Recheck after authentication or lock deferral: the foreground app and
         // settings may have changed since the initial cable insertion.

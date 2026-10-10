@@ -1,6 +1,7 @@
 package com.tiger.usbmanager.ui
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputFilter
 import android.view.Gravity
@@ -13,6 +14,7 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -46,7 +48,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
     private fun render(message: String? = null) {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.bg_page))
+            setBackgroundColor(uiColor(R.color.bg_page))
             applySystemBarPadding(includeHorizontal = true)
             addView(toolbar(getString(R.string.auth_page_title), back = { finish() }).apply {
                 applySystemBarPadding(includeTop = true)
@@ -81,10 +83,35 @@ class UsbAuthenticationActivity : LocalizedActivity() {
                     loadKnownComputers()
                 }
             }
+            addView(recognitionFooter())
         }
         root.addView(ScrollView(this).apply { isFillViewport = true; addView(content) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
+    }
+
+    private fun recognitionFooter(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(dp(12), dp(20), dp(12), dp(8))
+        addView(TextView(this@UsbAuthenticationActivity).apply {
+            setText(R.string.recognition_project_description)
+            textSize = 12f; gravity = Gravity.CENTER
+            setTextColor(uiColor(R.color.text_tertiary))
+        })
+        addView(TextView(this@UsbAuthenticationActivity).apply {
+            setText(R.string.recognition_project_link)
+            textSize = 13f; gravity = Gravity.CENTER
+            setTextColor(uiColor(R.color.usb_accent))
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            background = roundedBackground(R.color.accent_soft, 14)
+            isClickable = true; isFocusable = true; clickFeedback(14)
+            setOnClickListener {
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://github.com/TigerSpirit217/USBManagerRecognition"))) }
+                    .onFailure { Toast.makeText(this@UsbAuthenticationActivity, R.string.github_open_failed, Toast.LENGTH_SHORT).show() }
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(5) })
     }
 
     private fun introCard(): MaterialCardView = surfaceCard().apply {
@@ -94,14 +121,14 @@ class UsbAuthenticationActivity : LocalizedActivity() {
             addView(TextView(this@UsbAuthenticationActivity).apply {
                 text = getString(R.string.auth_experimental_badge)
                 textSize = 12f
-                setTextColor(getColor(R.color.on_accent_soft))
+                setTextColor(uiColor(R.color.on_accent_soft))
                 background = roundedBackground(R.color.accent_soft, 10)
                 setPadding(dp(10), dp(4), dp(10), dp(4))
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
             addView(TextView(this@UsbAuthenticationActivity).apply {
                 text = getString(R.string.auth_usage)
                 textSize = 12f
-                setTextColor(getColor(R.color.text_secondary))
+                setTextColor(uiColor(R.color.text_secondary))
                 setLineSpacing(0f, 1.18f)
             })
         })
@@ -115,14 +142,14 @@ class UsbAuthenticationActivity : LocalizedActivity() {
             addView(TextView(context).apply {
                 text = installed?.manifest?.name ?: getString(R.string.auth_scheme_none)
                 textSize = 15f
-                setTextColor(getColor(R.color.text_primary))
+                setTextColor(uiColor(R.color.text_primary))
             })
             if (installed != null) {
                 addView(TextView(context).apply {
                     text = getString(R.string.auth_scheme_details, installed.manifest.version,
                         installed.manifest.author, installed.manifest.description)
                     textSize = 12f
-                    setTextColor(getColor(R.color.text_secondary))
+                    setTextColor(uiColor(R.color.text_secondary))
                     setPadding(0, dp(5), 0, dp(8))
                     setLineSpacing(0f, 1.18f)
                 })
@@ -225,7 +252,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
             addView(TextView(this@UsbAuthenticationActivity).apply {
                 text = getString(R.string.auth_enable)
                 textSize = 15f
-                setTextColor(getColor(R.color.text_primary))
+                setTextColor(uiColor(R.color.text_primary))
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(SwitchMaterial(this@UsbAuthenticationActivity).apply {
                 useUsbManagerColors()
@@ -253,7 +280,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
             addView(TextView(this@UsbAuthenticationActivity).apply {
                 setText(R.string.auth_applying_setting)
                 textSize = 13f
-                setTextColor(getColor(R.color.text_secondary))
+                setTextColor(uiColor(R.color.text_secondary))
             })
         }
         transitionRow = row
@@ -338,15 +365,16 @@ class UsbAuthenticationActivity : LocalizedActivity() {
     private fun loadKnownComputers() {
         val progress = ProgressBar(this)
         val target = content
-        target.addView(progress)
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(progress) }
+        target.addView(list)
         Thread {
             val computers = runCatching { RootAuthManager.list(this) }.getOrDefault(emptyList())
             runOnUiThread {
-                if (content !== target || isFinishing || isDestroyed) return@runOnUiThread
-                content.removeView(progress)
-                if (computers.isEmpty()) content.addView(TextView(this).apply {
-                    text = getString(R.string.auth_saved_empty); textSize = 14f; setTextColor(getColor(R.color.text_secondary)); setPadding(dp(4), dp(8), dp(4), dp(8))
-                }) else computers.sortedByDescending { it.lastSeen }.forEach { content.addView(computerCard(it), verticalMargins(bottom = dp(10))) }
+                if (content !== target || list.parent !== target || isFinishing || isDestroyed) return@runOnUiThread
+                list.removeView(progress)
+                if (computers.isEmpty()) list.addView(TextView(this).apply {
+                    text = getString(R.string.auth_saved_empty); textSize = 14f; setTextColor(uiColor(R.color.text_secondary)); setPadding(dp(4), dp(8), dp(4), dp(8))
+                }) else computers.sortedByDescending { it.lastSeen }.forEach { list.addView(computerCard(it), verticalMargins(bottom = dp(10))) }
             }
         }.apply { name = "usb-auth-hosts"; start() }
     }
@@ -356,7 +384,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(14), dp(12), dp(10))
             addView(TextView(this@UsbAuthenticationActivity).apply {
-                text = computer.label; textSize = 16f; setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(getColor(R.color.text_primary))
+                text = computer.label; textSize = 16f; setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(uiColor(R.color.text_primary))
             })
             addView(TextView(this@UsbAuthenticationActivity).apply {
                 val lastSeen = DateFormat.getDateTimeInstance(DateFormat.DEFAULT, DateFormat.DEFAULT,
@@ -365,7 +393,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
                 val config = getString(R.string.auth_saved_config, mode,
                     if (computer.adb) getString(R.string.auth_adb_enabled) else "")
                 text = getString(R.string.auth_saved_details, lastSeen, computer.id.take(12), config)
-                textSize = 12f; setTextColor(getColor(R.color.text_secondary)); setPadding(0, dp(5), 0, dp(7))
+                textSize = 12f; setTextColor(uiColor(R.color.text_secondary)); setPadding(0, dp(5), 0, dp(7))
             })
             addView(LinearLayout(this@UsbAuthenticationActivity).apply {
                 gravity = Gravity.END
@@ -394,7 +422,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
     }
 
     private fun messageCard(value: String) = TextView(this).apply {
-        text = value; textSize = 13f; setTextColor(getColor(R.color.on_accent_soft))
+        text = value; textSize = 13f; setTextColor(uiColor(R.color.on_accent_soft))
         background = roundedBackground(R.color.accent_soft, 16)
         setPadding(dp(15), dp(12), dp(15), dp(12))
     }

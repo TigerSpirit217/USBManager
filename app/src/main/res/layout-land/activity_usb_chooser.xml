@@ -45,7 +45,7 @@
                         android:background="@drawable/bg_usb_header_icon"
                         android:contentDescription="@null"
                         android:src="@drawable/ic_usb_connection"
-                        app:tint="@color/usb_accent" />
+                        app:tint="?attr/appAccent" />
 
                     <TextView
                         android:id="@+id/chooser_heading"
@@ -126,7 +126,7 @@
                         android:clickable="true"
                         android:focusable="true"
                         android:foreground="?attr/selectableItemBackground"
-                        app:cardBackgroundColor="@color/usb_adb_background"
+                        app:cardBackgroundColor="?attr/appAccentSoft"
                         app:cardCornerRadius="15dp"
                         app:cardElevation="0dp">
 
@@ -144,7 +144,7 @@
                                 android:layout_height="24dp"
                                 android:contentDescription="@null"
                                 android:src="@drawable/ic_terminal"
-                                app:tint="@color/usb_accent" />
+                                app:tint="?attr/appAccent" />
 
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -201,13 +201,13 @@
                         android:minWidth="96dp"
                         android:text="@string/chooser_confirm"
                         android:textAllCaps="false"
-                        android:textColor="@color/on_usb_accent"
+                        android:textColor="?attr/appOnAccent"
                         app:backgroundTint="@color/primary_button_tint"
                         app:cornerRadius="15dp"
                         app:icon="@drawable/ic_arrow_forward"
                         app:iconGravity="textEnd"
                         app:iconPadding="7dp"
-                        app:iconTint="@color/on_usb_accent" />
+                        app:iconTint="?attr/appOnAccent" />
                 </LinearLayout>
 
                 <TextView
