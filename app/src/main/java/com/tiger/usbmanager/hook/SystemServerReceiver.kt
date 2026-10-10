@@ -109,6 +109,7 @@ internal class SystemServerReceiver(
                     Handler(Looper.getMainLooper()).post {
                         try {
                             val applied = mode != null && runCatching {
+                                watcher?.onLiveConfigApplying()
                                 if (adbOnly) controller.setAdbEnabled(adb) else controller.applyConfig(mode, adb)
                             }.onFailure { env.error("[RX] Live USB update failed", it) }.getOrDefault(false)
                             if (applied) watcher?.onChooserApplied(mode, adb)

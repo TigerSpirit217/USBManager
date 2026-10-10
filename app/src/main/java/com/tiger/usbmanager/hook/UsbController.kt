@@ -122,6 +122,27 @@ internal class UsbController(private val env: HookEnv) {
 
     // ---- Framework API attempts ----
 
+    /** Type-C attachment stays connected during gadget re-enumeration. Null means the ROM cannot report it. */
+    fun physicalUsbConnected(): Boolean? = runCatching {
+        val service = env.systemContext?.getSystemService("usb") ?: return@runCatching null
+        val ports = when (val result = service.javaClass.methodOrNull("getPorts")?.invoke(service)) {
+            is List<*> -> result
+            is Array<*> -> result.toList()
+            else -> return@runCatching null
+        }
+        if (ports.isEmpty()) return@runCatching null
+        var unknown = false
+        for (port in ports) {
+            if (port == null) { unknown = true; continue }
+            val status = port.javaClass.methodOrNull("getStatus")?.invoke(port)
+                ?: service.javaClass.methodOrNull("getPortStatus", port.javaClass)?.invoke(service, port)
+            val connected = status?.javaClass?.methodOrNull("isConnected")?.invoke(status) as? Boolean
+            if (connected == true) return@runCatching true
+            if (connected == null) unknown = true
+        }
+        if (unknown) null else false
+    }.getOrNull()
+
     /** The requested current mask is authoritative: 0 is charging even if the gadget advertises MTP. */
     fun currentFunctions(): String? {
         val cls = env.classLoader.findClassOrNull("android.hardware.usb.UsbManager") ?: return null

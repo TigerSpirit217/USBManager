@@ -103,6 +103,8 @@ internal class UsbStateWatcher(
     // change (mode/ADB toggle) rather than a fresh plug. See REENUM_SUPPRESS_MS.
     @Volatile private var suppressConnectUntilMs: Long = 0L
     @Volatile private var authTransitionUntilMs: Long = 0L
+    /** Status-page changes are already a user decision; their bus reset must not start another chooser. */
+    private var liveTransitionUntilElapsedMs = 0L
 
     // ---- Lock-deferral of the chooser (setting chooserWhileLocked=false) ----
     // When the USB mode chooser can't be shown while locked, we remember the pending
@@ -157,6 +159,7 @@ internal class UsbStateWatcher(
          *  reset that the kernel reports as DISCONNECTED → CONNECTED; without this the
          *  user sees the chooser flash again right after confirming. */
         private const val REENUM_SUPPRESS_MS = 3_000L
+        private const val LIVE_REENUM_SUPPRESS_MS = 12_000L
         private const val AUTH_REENUM_SUPPRESS_MS = 30_000L
         private const val AUTH_SESSION_TIMEOUT_MS = 85_000L
 
@@ -206,6 +209,24 @@ internal class UsbStateWatcher(
 
     override fun onUsbState(connected: Boolean) {
         handler.post { processUsbState(connected) }
+    }
+
+    /** Must run on the same main handler BEFORE calling a USB/ADB setter, including partially failed setters. */
+    @androidx.annotation.MainThread
+    fun onLiveConfigApplying() {
+        if (!lastConnected && controller.physicalUsbConnected() != true) return
+        liveTransitionUntilElapsedMs = android.os.SystemClock.elapsedRealtime() + LIVE_REENUM_SUPPRESS_MS
+        pendingConnectRunnable?.let(handler::removeCallbacks)
+        pendingConnectRunnable = null
+        clearTransitionRetry()
+        cancelDeferredChooser()
+        pendingPollGeneration += 1
+        // Discard an older automatic recognition result: the status page has superseded its decision.
+        authGeneration += 1
+        authTransitionUntilMs = 0L
+        cancelChooserNotification()
+        dismissChooserActivity()
+        env.info("[WATCHER] status-page decision: protecting USB re-enumeration before applying")
     }
 
     private fun processUsbState(connected: Boolean) {
@@ -261,6 +282,10 @@ internal class UsbStateWatcher(
 
     private fun handleConnect() {
         env.info("[WATCHER] handleConnect ENTER")
+        if (android.os.SystemClock.elapsedRealtime() < liveTransitionUntilElapsedMs) {
+            env.info("[WATCHER] status-page USB re-enumeration; retaining the user's choice")
+            return
+        }
         // A CONNECTED edge that arrives right after we applied a config (or turned
         // ADB off) is the gadget re-enumerating, not a fresh cable plug — skip the
         // chooser so the user doesn't see it flash again after confirming.
@@ -483,6 +508,20 @@ internal class UsbStateWatcher(
     }
 
     private fun handleDisconnect() {
+        val liveRemaining = liveTransitionUntilElapsedMs - android.os.SystemClock.elapsedRealtime()
+        if (liveRemaining > 0L && controller.physicalUsbConnected() != false) {
+            // A reset can exceed the ordinary 800 ms disconnect debounce. Keep ADB and the guard intact.
+            pendingDisconnectRunnable?.let(handler::removeCallbacks)
+            val retry = Runnable {
+                pendingDisconnectRunnable = null
+                if (!lastConnected) handleDisconnect()
+            }
+            pendingDisconnectRunnable = retry
+            handler.postDelayed(retry, liveRemaining.coerceAtMost(1_000L) + 50L)
+            return
+        }
+        // A reported physical unplug clears the guard immediately; ROMs without port status use the bounded timeout.
+        liveTransitionUntilElapsedMs = 0L
         // USB cable unplugged — stop any in-flight pending-apply poll loop
         // (the chooser UI can't resolve anything useful for a cable that isn't
         // connected anymore, and we'd otherwise keep polling for 30 s).
@@ -570,6 +609,7 @@ internal class UsbStateWatcher(
 
     @SuppressLint("MissingPermission") // Runs with system_server's UID and notification permissions.
     private fun launchChooser(ctx: Context, request: ChooserRequest) {
+        if (android.os.SystemClock.elapsedRealtime() < liveTransitionUntilElapsedMs) return
         // Recheck after authentication or lock deferral: the foreground app and
         // settings may have changed since the initial cable insertion.
         val settings = runCatching { hostClient.settings() }.getOrNull()
