@@ -140,7 +140,7 @@ internal fun Context.toolbar(title: CharSequence, back: (() -> Unit)? = null, ac
         if (action != null) addView(TextView(this@toolbar).apply {
             text = action.first
             textSize = 14f
-            setTextColor(uiColor(R.color.usb_accent))
+            setTextColor(uiColor(R.color.on_accent_soft))
             gravity = Gravity.CENTER
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = roundedBackground(R.color.accent_soft, 14)

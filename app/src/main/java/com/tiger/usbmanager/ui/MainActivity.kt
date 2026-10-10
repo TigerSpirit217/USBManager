@@ -547,7 +547,7 @@ class MainActivity : FragmentActivity() {
             text = getString(R.string.github_repository)
             textSize = 13f
             gravity = Gravity.CENTER
-            setTextColor(uiColor(R.color.usb_accent))
+            setTextColor(uiColor(R.color.on_accent_soft))
             setPadding(dp(14), dp(8), dp(14), dp(8))
             background = roundedBackground(R.color.accent_soft, 14)
             clickFeedback(14)

@@ -104,7 +104,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
         addView(TextView(this@UsbAuthenticationActivity).apply {
             setText(R.string.recognition_project_link)
             textSize = 13f; gravity = Gravity.CENTER
-            setTextColor(uiColor(R.color.usb_accent))
+            setTextColor(uiColor(R.color.on_accent_soft))
             setPadding(dp(14), dp(8), dp(14), dp(8))
             background = roundedBackground(R.color.accent_soft, 14)
             isClickable = true; isFocusable = true; clickFeedback(14)

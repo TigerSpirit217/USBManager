@@ -14,6 +14,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
+import android.widget.Space
 import android.widget.TextView
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.TextViewCompat
@@ -45,38 +46,56 @@ internal class AppearancePage(
             })
             addView(sectionLabel(getString(R.string.display_section)))
             addView(surfaceCard().apply {
-                val appearance = LinearLayout(activity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    addView(themeModeRow())
-                    addView(divider())
-                    addView(switchRow(R.string.display_vertical_layout, DisplaySettings.verticalLayout()) {
-                        DisplaySettings.setVerticalLayout(it); afterSwitchMotion(layoutChanged)
-                    })
-                    addView(divider())
-                    addView(switchRow(R.string.display_bar_floating, DisplaySettings.floating()) {
-                        DisplaySettings.setFloating(it); barChanged()
-                    })
+                val wide = twoColumns()
+                val themeMode = themeModeRow()
+                val verticalLayout = switchRow(R.string.display_vertical_layout, DisplaySettings.verticalLayout()) {
+                    DisplaySettings.setVerticalLayout(it); afterSwitchMotion(layoutChanged)
                 }
-                val colors = LinearLayout(activity).apply {
+                val floatingBar = switchRow(R.string.display_bar_floating, DisplaySettings.floating()) {
+                    DisplaySettings.setFloating(it); barChanged()
+                }
+                val dynamicColors = switchRow(R.string.display_dynamic,
+                    DisplaySettings.dynamic() && DisplaySettings.dynamicAvailable(), DisplaySettings.dynamicAvailable()) {
+                    DisplaySettings.setDynamic(it); animateColorRow(!it)
+                }
+                val themeColor = row(R.string.display_theme_color, DisplaySettings.hex(DisplaySettings.seed())) {
+                    ThemeColorDialog(activity) { DisplaySettings.setSeed(it); themeChanged() }.show()
+                }
+                colorRow = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
-                    if (!twoColumns()) addView(divider())
-                    addView(switchRow(R.string.display_dynamic,
-                        DisplaySettings.dynamic() && DisplaySettings.dynamicAvailable(), DisplaySettings.dynamicAvailable()) {
-                        DisplaySettings.setDynamic(it); animateColorRow(!it)
-                    })
-                    colorRow = LinearLayout(activity).apply {
-                        orientation = LinearLayout.VERTICAL
-                        visibility = if (DisplaySettings.dynamic() && DisplaySettings.dynamicAvailable()) View.GONE else View.VISIBLE
+                    visibility = if (DisplaySettings.dynamic() && DisplaySettings.dynamicAvailable()) View.GONE else View.VISIBLE
+                    addView(divider())
+                    addView(if (wide) pairedRow(themeColor, Space(activity)) else themeColor)
+                }
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    if (wide) {
+                        addView(pairedRow(themeMode, verticalLayout))
                         addView(divider())
-                        addView(row(R.string.display_theme_color, DisplaySettings.hex(DisplaySettings.seed())) {
-                            ThemeColorDialog(activity) { DisplaySettings.setSeed(it); themeChanged() }.show()
-                        })
+                        addView(pairedRow(dynamicColors, floatingBar))
+                    } else {
+                        addView(themeMode)
+                        addView(divider())
+                        addView(verticalLayout)
+                        addView(divider())
+                        addView(floatingBar)
+                        addView(divider())
+                        addView(dynamicColors)
                     }
+                    // A separate final row changes the whole card's height when collapsed.
                     addView(colorRow)
-                }
-                addView(adaptiveColumns(appearance, colors))
+                })
             })
 
+        }
+    }
+
+    private fun pairedRow(first: View, second: View) = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        isBaselineAligned = false
+        listOf(first, second).forEach { cell ->
+            addView(cell, LinearLayout.LayoutParams(0, if (cell is Space) 0 else ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
     }
 
