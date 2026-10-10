@@ -21,6 +21,7 @@ import com.google.android.material.navigation.NavigationBarView
 import com.google.android.material.shape.ShapeAppearanceModel
 import com.tiger.usbmanager.R
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** Independently implemented capsule with a continuous indicator, tap and drag selection. */
 @android.annotation.SuppressLint("ViewConstructor", "RtlHardcoded") // Programmatic view; indicator uses physical coordinates with explicit RTL mapping.
@@ -39,6 +40,9 @@ internal class AppNavigationBar(
     private var downY = 0f
     private var dragging = false
     private var nativeSelection = false
+    private var syncingSelection = false
+    private var previewPosition: Float? = null
+    private var releaseTarget: Int? = null
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
 
     init {
@@ -95,6 +99,7 @@ internal class AppNavigationBar(
                 entries.forEachIndexed { position, (title, icon) -> menu.add(0, position + 1, position, title).setIcon(icon) }
                 selectedItemId = selected + 1
                 setOnItemSelectedListener {
+                    if (syncingSelection) return@setOnItemSelectedListener true
                     nativeSelection = true
                     try { onSelected(it.itemId - 1) } finally { nativeSelection = false }
                     true
@@ -105,15 +110,46 @@ internal class AppNavigationBar(
         select(selected, false)
     }
 
-    fun select(position: Int, animated: Boolean) {
+    fun select(position: Int, animated: Boolean, fromDrag: Boolean = false) {
+        // A page finishing must not restart the capsule's independent release animation.
+        if (!fromDrag && !animated && releaseTarget == position) return
         index = position
-        material?.let { if (!nativeSelection && it.selectedItemId != position + 1) it.selectedItemId = position + 1 }
+        releaseTarget = if (fromDrag && animated && UiMotion.enabled()) position else null
+        if (!fromDrag) previewPosition = null
+        syncMaterial(position)
         tabs.forEachIndexed { tab, (icon, label) ->
             val color = context.uiColor(if (tab == position) R.color.usb_accent else R.color.usb_icon_inactive)
             icon.imageTintList = ColorStateList.valueOf(color); label.setTextColor(color)
             (icon.parent as View).isSelected = tab == position
         }
         updateIndicator(animated)
+    }
+
+    /** Page drag progress is fractional, so the capsule and icon colors follow the page itself. */
+    fun preview(position: Float) {
+        previewPosition = position
+        if (dragging || releaseTarget != null) return
+        syncMaterial(position.roundToInt())
+        if (!floating || width == 0) return
+        indicator.animate().cancel()
+        val physical = if (layoutDirection == LAYOUT_DIRECTION_RTL) tabs.lastIndex - position else position
+        indicator.translationX = physical * tabWidth()
+        updateFloatingHighlight()
+    }
+
+    /** Direct page swipes take back control from a previous bottom-bar release. */
+    fun followPage() {
+        releaseTarget = null
+        indicator.animate().cancel()
+    }
+
+    private fun syncMaterial(position: Int) {
+        material?.let {
+            if (!nativeSelection && it.selectedItemId != position + 1) {
+                syncingSelection = true
+                try { it.selectedItemId = position + 1 } finally { syncingSelection = false }
+            }
+        }
     }
 
     private fun physical(position: Int) = if (layoutDirection == LAYOUT_DIRECTION_RTL) tabs.lastIndex - position else position
@@ -127,7 +163,8 @@ internal class AppNavigationBar(
             updateFloatingHighlight()
             indicator.animate().translationX(target).setDuration(340)
                 .setInterpolator(OvershootInterpolator(0.65f))
-                .setUpdateListener { updateFloatingHighlight() }.start()
+                .setUpdateListener { updateFloatingHighlight() }
+                .withEndAction { releaseTarget = null }.start()
         } else {
             indicator.translationX = target
             updateFloatingHighlight()
@@ -158,7 +195,7 @@ internal class AppNavigationBar(
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
-        if (floating && !dragging) updateIndicator(false)
+        if (floating && !dragging && releaseTarget == null) previewPosition?.let(::preview) ?: updateIndicator(false)
     }
 
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
@@ -175,22 +212,29 @@ internal class AppNavigationBar(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!floating || !dragging) return super.onTouchEvent(event)
         val slot = tabWidth()
+        if (slot <= 0f) return true
         when (event.actionMasked) {
-            MotionEvent.ACTION_MOVE -> {
-                indicator.translationX = (event.x - context.dp(4) - slot / 2).coerceIn(0f, slot * tabs.lastIndex)
-                updateFloatingHighlight()
-            }
+            MotionEvent.ACTION_MOVE -> dragIndicator(event.x, slot)
             MotionEvent.ACTION_UP -> {
+                dragIndicator(event.x, slot)
                 val physical = ((event.x - context.dp(4)) / slot).toInt().coerceIn(0, tabs.lastIndex)
                 val target = if (layoutDirection == LAYOUT_DIRECTION_RTL) tabs.lastIndex - physical else physical
-                dragging = false; select(target, true); onSelected(target)
+                dragging = false; select(target, true, fromDrag = true); onSelected(target)
                 performClick()
                 performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                 parent.requestDisallowInterceptTouchEvent(false)
             }
-            MotionEvent.ACTION_CANCEL -> { dragging = false; updateIndicator(true); parent.requestDisallowInterceptTouchEvent(false) }
+            MotionEvent.ACTION_CANCEL -> {
+                dragging = false; select(index, true, fromDrag = true)
+                parent.requestDisallowInterceptTouchEvent(false)
+            }
         }
         return true
+    }
+
+    private fun dragIndicator(x: Float, slot: Float) {
+        indicator.translationX = (x - context.dp(4) - slot / 2).coerceIn(0f, slot * tabs.lastIndex)
+        updateFloatingHighlight()
     }
 
     override fun onDetachedFromWindow() { indicator.animate().cancel(); super.onDetachedFromWindow() }

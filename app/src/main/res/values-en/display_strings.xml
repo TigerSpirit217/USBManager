@@ -23,6 +23,8 @@
     <string name="status_runtime_unavailable">The system did not respond. Make sure the module is enabled and restart the phone after updating it.</string>
     <string name="display_section">Display and theme</string>
     <string name="display_bar_floating">Floating bar</string>
+    <string name="display_vertical_layout">Lock vertical layout</string>
+    <string name="settings_advanced_section">Advanced</string>
     <string name="display_dynamic">Dynamic colors</string>
     <string name="display_theme_color">Theme color</string>
     <string name="display_dynamic_hint">Use dynamic colors from the system theme</string>

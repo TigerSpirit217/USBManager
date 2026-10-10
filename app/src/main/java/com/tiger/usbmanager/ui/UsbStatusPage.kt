@@ -30,6 +30,9 @@ internal class UsbStatusPage(private val activity: Activity) {
     private val colorAnimations = mutableMapOf<UsbMode, android.animation.ValueAnimator>()
     private var lastConnection: Boolean? = null
     private var feedbackMessage = 0
+    private var visible = false
+    private var feedbackSession = 0
+    private var pendingSession = -1
     private var adbSwitch: SwitchMaterial? = null
     private var binding = false
     private var pending: CurrentUsbSnapshot? = null
@@ -39,12 +42,21 @@ internal class UsbStatusPage(private val activity: Activity) {
 
     fun start() = observer.start()
     fun stop() = observer.stop()
+    fun setVisible(value: Boolean) {
+        if (visible == value) return
+        visible = value
+        feedbackMessage = 0
+        if (!value) feedbackSession++
+        feedback?.apply { animate().cancel(); text = ""; visibility = View.GONE }
+        if (value && contentRoot != null) render(snapshot)
+    }
     fun destroy() {
         generation++; handler.removeCallbacksAndMessages(null)
         colorAnimations.values.forEach { it.cancel() }; colorAnimations.clear()
     }
 
     fun content(): LinearLayout = with(activity) {
+        val inlineDebugging = landscape()
         colorAnimations.values.forEach { it.cancel() }; colorAnimations.clear(); modeButtons.clear()
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -53,15 +65,16 @@ internal class UsbStatusPage(private val activity: Activity) {
             addView(surfaceCard(24).apply {
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(dp(18), dp(20), dp(18), dp(18))
-                    addView(LinearLayout(activity).apply {
+                    setPadding(dp(18), dp(if (landscape()) 12 else 20), dp(18), dp(if (landscape()) 12 else 18))
+                    val connectionHeader = LinearLayout(activity).apply {
                         gravity = Gravity.CENTER_VERTICAL
                         heading = pageTitle("").apply {
                             textSize = 21f
                             accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
                         }
                         addView(heading, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    })
+                    }
+                    addView(connectionHeader)
                     connectionHint = TextView(activity).apply {
                         textSize = 13f; setTextColor(uiColor(R.color.text_secondary))
                         setPadding(0, dp(14), 0, dp(6)); setLineSpacing(0f, 1.15f)
@@ -70,30 +83,45 @@ internal class UsbStatusPage(private val activity: Activity) {
                     modeControls = LinearLayout(activity).apply {
                         orientation = LinearLayout.VERTICAL
                         setPadding(0, dp(10), 0, dp(10))
-                        addView(modeButton(UsbMode.CHARGING), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
-                        listOf(listOf(UsbMode.MTP, UsbMode.PTP), listOf(UsbMode.RNDIS, UsbMode.MIDI)).forEach { pair ->
-                            addView(LinearLayout(activity).apply {
-                                orientation = LinearLayout.HORIZONTAL
-                                isBaselineAligned = false
-                                pair.forEachIndexed { index, mode ->
-                                    addView(modeButton(mode), LinearLayout.LayoutParams(0, dp(64), 1f).apply {
-                                        if (index == 0) marginEnd = dp(8)
-                                    })
-                                }
-                            }, verticalMargins(top = dp(8), bottom = 0))
+                        if (twoColumns()) {
+                            orientation = LinearLayout.HORIZONTAL
+                            isBaselineAligned = false
+                            UsbMode.entries.forEachIndexed { index, mode ->
+                                addView(modeButton(mode), LinearLayout.LayoutParams(0, dp(80), 1f).apply {
+                                    if (index > 0) marginStart = dp(8)
+                                })
+                            }
+                        } else {
+                            addView(modeButton(UsbMode.CHARGING), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
+                            listOf(listOf(UsbMode.MTP, UsbMode.PTP), listOf(UsbMode.RNDIS, UsbMode.MIDI)).forEach { pair ->
+                                addView(LinearLayout(activity).apply {
+                                    orientation = LinearLayout.HORIZONTAL
+                                    isBaselineAligned = false
+                                    pair.forEachIndexed { index, mode ->
+                                        addView(modeButton(mode), LinearLayout.LayoutParams(0, dp(64), 1f).apply {
+                                            if (index == 0) marginEnd = dp(8)
+                                        })
+                                    }
+                                }, verticalMargins(top = dp(8), bottom = 0))
+                            }
                         }
                     }
                     addView(modeControls)
-                    addView(View(activity).apply { setBackgroundColor(uiColor(R.color.outline)) },
+                    if (!inlineDebugging) addView(View(activity).apply { setBackgroundColor(uiColor(R.color.outline)) },
                         LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply { topMargin = dp(14); bottomMargin = dp(8) })
-                    addView(LinearLayout(activity).apply {
+                    val debugging = LinearLayout(activity).apply {
                         gravity = Gravity.CENTER_VERTICAL
                         addView(LinearLayout(activity).apply {
                             orientation = LinearLayout.VERTICAL
                             addView(TextView(activity).apply {
-                                setText(R.string.status_adb_title); textSize = 15f; setTextColor(uiColor(R.color.text_primary))
+                                setText(R.string.status_adb_title)
+                                textSize = if (inlineDebugging) 21f else 15f
+                                if (inlineDebugging) setTypeface(typeface, android.graphics.Typeface.BOLD)
+                                setTextColor(uiColor(R.color.text_primary))
                             })
-                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        }, if (inlineDebugging) LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                            marginEnd = dp(12)
+                        } else LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                         adbSwitch = SwitchMaterial(activity).apply {
                             contentDescription = getString(R.string.status_adb_title)
                             useUsbManagerColors()
@@ -102,7 +130,10 @@ internal class UsbStatusPage(private val activity: Activity) {
                             }
                         }
                         addView(adbSwitch)
-                    })
+                    }
+                    if (inlineDebugging) connectionHeader.addView(debugging,
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(20) })
+                    else addView(debugging)
                     feedback = TextView(activity).apply {
                         textSize = 12f; setTextColor(uiColor(R.color.text_secondary))
                         setPadding(0, dp(12), 0, 0); setLineSpacing(0f, 1.2f)
@@ -138,7 +169,11 @@ internal class UsbStatusPage(private val activity: Activity) {
                 UsbMode.MIDI -> R.drawable.ic_midi
             })
             iconSize = dp(20); iconPadding = dp(8); iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-            setPadding(dp(10), 0, dp(10), 0)
+            if (twoColumns()) {
+                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_TOP
+                iconPadding = dp(6)
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+            } else setPadding(dp(10), 0, dp(10), 0)
             rippleColor = ColorStateList.valueOf(androidx.core.graphics.ColorUtils.setAlphaComponent(uiColor(R.color.usb_accent), 32))
             modeButtons[mode] = this
             setOnClickListener {
@@ -202,9 +237,15 @@ internal class UsbStatusPage(private val activity: Activity) {
             adbSwitch?.let { androidx.core.view.ViewCompat.setStateDescription(it, getString(when (current.adb) {
                 true -> R.string.status_adb_enabled; false -> R.string.status_adb_disabled; null -> R.string.status_unavailable
             })) }
-            val message = if (pending == null) feedbackMessage else R.string.status_applying
+            val message = when {
+                !visible -> 0
+                pending == null -> feedbackMessage
+                pendingSession == feedbackSession -> R.string.status_applying
+                else -> 0
+            }
             feedback?.visibility = if (message == 0) View.GONE else View.VISIBLE
-            UiMotion.text(feedback, if (message == 0) "" else getString(message))
+            if (message == 0) feedback?.apply { animate().cancel(); text = "" }
+            else UiMotion.text(feedback, getString(message))
         }
         verifyPending()
     }
@@ -215,6 +256,7 @@ internal class UsbStatusPage(private val activity: Activity) {
         adbOnly = onlyAdb
         acknowledged = false
         feedbackMessage = 0
+        pendingSession = feedbackSession
         pending = CurrentUsbSnapshot(snapshot.connected, mode, adb)
         render(snapshot)
         handler.postDelayed({
@@ -242,7 +284,7 @@ internal class UsbStatusPage(private val activity: Activity) {
         pending = null
         generation++
         handler.removeCallbacksAndMessages(null)
-        feedbackMessage = message
+        feedbackMessage = if (visible && pendingSession == feedbackSession) message else 0
         render(snapshot)
     }
 }

@@ -20,7 +20,12 @@ import androidx.core.widget.TextViewCompat
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.tiger.usbmanager.R
 
-internal class AppearancePage(private val activity: Activity, private val themeChanged: () -> Unit, private val barChanged: () -> Unit) {
+internal class AppearancePage(
+    private val activity: Activity,
+    private val themeChanged: () -> Unit,
+    private val barChanged: () -> Unit,
+    private val layoutChanged: () -> Unit,
+) {
     private var colorRow: LinearLayout? = null
     private var colorAnimation: ValueAnimator? = null
     private var colorGeneration = 0
@@ -40,14 +45,21 @@ internal class AppearancePage(private val activity: Activity, private val themeC
             })
             addView(sectionLabel(getString(R.string.display_section)))
             addView(surfaceCard().apply {
-                addView(LinearLayout(activity).apply {
+                val appearance = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(themeModeRow())
                     addView(divider())
-                    addView(switchRow(R.string.display_bar_floating, DisplaySettings.floating()) {
-                        DisplaySettings.setFloating(it); afterSwitchMotion(barChanged)
+                    addView(switchRow(R.string.display_vertical_layout, DisplaySettings.verticalLayout()) {
+                        DisplaySettings.setVerticalLayout(it); afterSwitchMotion(layoutChanged)
                     })
                     addView(divider())
+                    addView(switchRow(R.string.display_bar_floating, DisplaySettings.floating()) {
+                        DisplaySettings.setFloating(it); barChanged()
+                    })
+                }
+                val colors = LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    if (!twoColumns()) addView(divider())
                     addView(switchRow(R.string.display_dynamic,
                         DisplaySettings.dynamic() && DisplaySettings.dynamicAvailable(), DisplaySettings.dynamicAvailable()) {
                         DisplaySettings.setDynamic(it); animateColorRow(!it)
@@ -61,7 +73,8 @@ internal class AppearancePage(private val activity: Activity, private val themeC
                         })
                     }
                     addView(colorRow)
-                })
+                }
+                addView(adaptiveColumns(appearance, colors))
             })
 
         }

@@ -62,27 +62,29 @@ class UsbAuthenticationActivity : LocalizedActivity() {
         transitionRow = null
         settingsCardView = null
         content.apply {
-            addView(introCard())
-            addView(sectionLabel(getString(R.string.auth_scheme_title)))
-            addView(schemeCard())
-            if (message != null) addView(messageCard(message), verticalMargins(top = dp(12), bottom = 0))
-            if (SchemeStore.current(this@UsbAuthenticationActivity) == null) {
-                addView(messageCard(getString(R.string.auth_scheme_required)), verticalMargins(top = dp(12)))
-            } else if (!RecognitionSettings.isSupported(this@UsbAuthenticationActivity)) {
-                addView(primaryButton(getString(R.string.auth_detect)) { runDetection() }, verticalMargins(top = dp(18)))
-            } else {
-                addView(messageCard(getString(R.string.auth_supported)), verticalMargins(top = dp(12), bottom = 0))
-                addView(outlinedButton(getString(R.string.auth_detect)) { runDetection() }, verticalMargins(top = dp(8), bottom = 0))
-                addView(sectionLabel(getString(R.string.auth_section_title)))
-                val settings = settingsCard()
-                settingsCardView = settings
-                addView(settings)
-                if (RecognitionSettings.isEnabled(this@UsbAuthenticationActivity)) {
-                    addView(primaryButton(getString(R.string.auth_allow_pair)) { runPairingWindow() }, verticalMargins(top = dp(14)))
-                    addView(sectionLabel(getString(R.string.auth_saved_title)))
-                    loadKnownComputers()
+            val overview = verticalContent(introCard(), sectionLabel(getString(R.string.auth_scheme_title)), schemeCard())
+            val controls = LinearLayout(this@UsbAuthenticationActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                if (message != null) addView(messageCard(message), verticalMargins(top = dp(12), bottom = 0))
+                if (SchemeStore.current(this@UsbAuthenticationActivity) == null) {
+                    addView(messageCard(getString(R.string.auth_scheme_required)), verticalMargins(top = dp(12)))
+                } else if (!RecognitionSettings.isSupported(this@UsbAuthenticationActivity)) {
+                    addView(primaryButton(getString(R.string.auth_detect)) { runDetection() }, verticalMargins(top = dp(18)))
+                } else {
+                    addView(messageCard(getString(R.string.auth_supported)), verticalMargins(top = dp(12), bottom = 0))
+                    addView(outlinedButton(getString(R.string.auth_detect)) { runDetection() }, verticalMargins(top = dp(8), bottom = 0))
+                    addView(sectionLabel(getString(R.string.auth_section_title)))
+                    val settings = settingsCard()
+                    settingsCardView = settings
+                    addView(settings)
+                    if (RecognitionSettings.isEnabled(this@UsbAuthenticationActivity)) {
+                        addView(primaryButton(getString(R.string.auth_allow_pair)) { runPairingWindow() }, verticalMargins(top = dp(14)))
+                        addView(sectionLabel(getString(R.string.auth_saved_title)))
+                        loadKnownComputers(this)
+                    }
                 }
             }
+            addView(adaptiveColumns(overview, controls))
             addView(recognitionFooter())
         }
         root.addView(ScrollView(this).apply { isFillViewport = true; addView(content) },
@@ -225,6 +227,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
                     }
                 }
                 show()
+                window?.fitLandscapeDialog()
             }
     }
 
@@ -241,7 +244,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
                             else schemeErrorText(result.exceptionOrNull()))
                     }
                 }.start()
-            }.show()
+            }.show().apply { window?.fitLandscapeDialog() }
     }
 
     private fun settingsCard(): MaterialCardView = surfaceCard().apply {
@@ -322,11 +325,20 @@ class UsbAuthenticationActivity : LocalizedActivity() {
             setText(R.string.auth_adb_label)
             isChecked = computer.adb
         }
-        form.addView(name); form.addView(mode); form.addView(adb)
+        form.addView(name)
+        form.addView(LinearLayout(this).apply {
+            orientation = if (twoColumns()) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(mode, if (twoColumns()) LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                else LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(adb)
+        })
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(if (afterPairing) R.string.auth_pair_customize else R.string.auth_edit)
-            .setView(form).setNegativeButton(R.string.dialog_cancel, null).setPositiveButton(R.string.auth_save, null).create()
+            .setView(ScrollView(this).apply { addView(form) })
+            .setNegativeButton(R.string.dialog_cancel, null).setPositiveButton(R.string.auth_save, null).create()
         dialog.setOnShowListener {
+            dialog.window?.fitLandscapeDialog()
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val label = name.text.toString().trim()
                 if (label.isEmpty() || label.any { char -> char.isISOControl() }) {
@@ -362,15 +374,16 @@ class UsbAuthenticationActivity : LocalizedActivity() {
         }.apply { name = "usb-auth-pair"; start() }
     }
 
-    private fun loadKnownComputers() {
+    private fun loadKnownComputers(into: LinearLayout = content) {
         val progress = ProgressBar(this)
-        val target = content
+        val renderRoot = content
+        val target = into
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(progress) }
         target.addView(list)
         Thread {
             val computers = runCatching { RootAuthManager.list(this) }.getOrDefault(emptyList())
             runOnUiThread {
-                if (content !== target || list.parent !== target || isFinishing || isDestroyed) return@runOnUiThread
+                if (content !== renderRoot || list.parent !== target || isFinishing || isDestroyed) return@runOnUiThread
                 list.removeView(progress)
                 if (computers.isEmpty()) list.addView(TextView(this).apply {
                     text = getString(R.string.auth_saved_empty); textSize = 14f; setTextColor(uiColor(R.color.text_secondary)); setPadding(dp(4), dp(8), dp(4), dp(8))
@@ -411,7 +424,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
                     val ok = runCatching { RootAuthManager.delete(this, computer.id) }.getOrDefault(false)
                     runOnUiThread { render(if (ok) null else getString(R.string.auth_save_failed)) }
                 }.start()
-            }.show()
+            }.show().apply { window?.fitLandscapeDialog() }
     }
 
     private fun showBusy(text: String) {

@@ -31,6 +31,8 @@ internal class ThemeColorDialog(private val activity: Activity, private val save
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), dp(12))
         }
+        val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val adjustments = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val swatch = View(this).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
         val input = EditText(this).apply {
             isSingleLine = true; textSize = 17f; typeface = android.graphics.Typeface.MONOSPACE
@@ -41,7 +43,7 @@ internal class ThemeColorDialog(private val activity: Activity, private val save
             contentDescription = getString(R.string.theme_hex)
             backgroundTintList = ColorStateList.valueOf(uiColor(R.color.usb_accent))
         }
-        column.addView(LinearLayout(this).apply {
+        details.addView(LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             addView(swatch, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(16) })
             addView(input, LinearLayout.LayoutParams(0, dp(56), 1f))
@@ -54,7 +56,7 @@ internal class ThemeColorDialog(private val activity: Activity, private val save
             text = getString(R.string.palette_preview_container); gravity = Gravity.CENTER; textSize = 14f
             setPadding(dp(14), dp(12), dp(14), dp(12))
         }
-        column.addView(LinearLayout(this).apply {
+        details.addView(LinearLayout(this).apply {
             addView(primary, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) })
             addView(container, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }, verticalMargins(top = dp(12)))
@@ -79,7 +81,7 @@ internal class ThemeColorDialog(private val activity: Activity, private val save
         listOf(R.string.theme_hue, R.string.theme_saturation, R.string.theme_value).forEachIndexed { i, label ->
             val valueLabel = TextView(this).apply { textSize = 12f; setTextColor(uiColor(R.color.text_secondary)) }
             values.add(valueLabel)
-            column.addView(LinearLayout(this).apply {
+            adjustments.addView(LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(TextView(activity).apply { setText(label); textSize = 13f; setTextColor(uiColor(R.color.text_primary)) },
                     LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -96,16 +98,16 @@ internal class ThemeColorDialog(private val activity: Activity, private val save
                 }
             }
             sliders.add(slider)
-            column.addView(slider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+            adjustments.addView(slider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         }
-        column.addView(TextView(this).apply {
+        details.addView(TextView(this).apply {
             setText(R.string.theme_seed_hint); textSize = 12f; setTextColor(uiColor(R.color.text_secondary))
             setPadding(0, dp(8), 0, dp(10))
         })
         val presetSeeds = intArrayOf(DisplaySettings.DEFAULT_SEED, 0xFF25764F.toInt(), 0xFF7454B5.toInt(),
             0xFFA85519.toInt(), 0xFFB4426B.toInt(), 0xFF007B83.toInt())
         val labels = intArrayOf(R.string.theme_blue, R.string.theme_green, R.string.theme_purple, R.string.theme_orange, R.string.theme_rose, R.string.theme_teal)
-        column.addView(LinearLayout(this).apply {
+        details.addView(LinearLayout(this).apply {
             gravity = Gravity.CENTER
             presetSeeds.forEachIndexed { i, seed ->
                 addView(android.widget.FrameLayout(activity).apply {
@@ -129,12 +131,19 @@ internal class ThemeColorDialog(private val activity: Activity, private val save
                 }
             }
         })
+        if (twoColumns()) column.addView(adaptiveColumns(details, adjustments)) else {
+            // Keep HSV controls before the explanation and presets in portrait.
+            val explanation = details.getChildAt(2); details.removeView(explanation)
+            val presets = details.getChildAt(2); details.removeView(presets)
+            column.addView(details); column.addView(adjustments); column.addView(explanation); column.addView(presets)
+        }
         update()
         val dialog = MaterialAlertDialogBuilder(this).setTitle(R.string.display_theme_color)
             .setView(ScrollView(this).apply { addView(column) })
             .setNegativeButton(R.string.dialog_cancel, null).setPositiveButton(R.string.chooser_confirm, null).create()
         dialog.setOnShowListener {
             dialog.applyUsbDialogColors()
+            dialog.window?.fitLandscapeDialog(720)
             UiMotion.enter(column)
             dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                 if (!input.text.toString().matches(Regex("#[0-9a-fA-F]{6}"))) { input.error = getString(R.string.theme_hex_invalid); return@setOnClickListener }

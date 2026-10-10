@@ -54,14 +54,17 @@ class GameDndSettingsActivity : LocalizedActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(28))
             applySystemBarPadding(includeBottom = true)
-            addView(surfaceCard().apply {
-                addView(bodyText(R.string.game_dnd_description).apply {
-                    setPadding(dp(18), dp(17), dp(18), dp(17))
+            val summary = LinearLayout(this@GameDndSettingsActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(surfaceCard().apply {
+                    addView(bodyText(R.string.game_dnd_description).apply {
+                        setPadding(dp(18), dp(17), dp(18), dp(17))
+                    })
                 })
-            })
-            addView(sectionLabel(getString(R.string.settings_module_settings)))
-            addView(enableCard())
-            addView(advancedSettings)
+                addView(sectionLabel(getString(R.string.settings_module_settings)))
+                addView(enableCard())
+            }
+            addView(adaptiveColumns(summary, advancedSettings))
         }
         root.addView(ScrollView(this).apply { isFillViewport = true; addView(column) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -150,6 +153,7 @@ class GameDndSettingsActivity : LocalizedActivity() {
             }
         riskDialog?.apply {
             show()
+            window?.fitLandscapeDialog()
             findViewById<TextView>(android.R.id.message)?.setTextColor(uiColor(R.color.game_dnd_warning))
         }
     }

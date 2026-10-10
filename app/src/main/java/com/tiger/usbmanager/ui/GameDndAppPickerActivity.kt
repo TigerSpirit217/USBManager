@@ -45,6 +45,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
     private var visiblePackages = emptyList<CatalogApp>()
     private var showSystemApps = false
     private var catalogLoaded = false
+    private var restoredListState: android.os.Parcelable? = null
     private val appAdapter = AppAdapter()
     private val labelCollator by lazy { Collator.getInstance(resources.configuration.locales[0]) }
     private lateinit var search: EditText
@@ -60,6 +61,9 @@ class GameDndAppPickerActivity : LocalizedActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         selected.addAll(savedInstanceState?.getStringArrayList("selection") ?: ModuleSettings.gameDndPackages())
         // Keep the initial grouping for the entire editing session, including rotation.
+        @Suppress("DEPRECATION")
+        val previousListState = savedInstanceState?.getParcelable<android.os.Parcelable>("list_state")
+        restoredListState = previousListState
         initiallySelected = savedInstanceState?.getStringArrayList("initial_selection")?.toSet() ?: selected.toSet()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -124,7 +128,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
         val footer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.END
-            setPadding(dp(18), dp(8), dp(18), dp(12))
+            setPadding(dp(18), dp(if (landscape()) 4 else 8), dp(18), dp(if (landscape()) 6 else 12))
             applySystemBarPadding(includeBottom = true, includeIme = true)
         }
         save = MaterialButton(this).apply {
@@ -180,7 +184,10 @@ class GameDndAppPickerActivity : LocalizedActivity() {
                 if (labelOrder != 0) labelOrder else a.packageName.compareTo(b.packageName)
             }
         appAdapter.notifyDataSetChanged()
-        if (catalogLoaded) status.setText(R.string.game_dnd_no_apps)
+        if (catalogLoaded) {
+            status.setText(R.string.game_dnd_no_apps)
+            restoredListState?.let { list.onRestoreInstanceState(it); restoredListState = null }
+        }
     }
 
     private fun actionParams() = LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(8) }
@@ -312,6 +319,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putStringArrayList("selection", ArrayList(selected))
         outState.putStringArrayList("initial_selection", ArrayList(initiallySelected))
+        outState.putParcelable("list_state", restoredListState ?: list.onSaveInstanceState())
         outState.putString("search", search.text.toString())
         outState.putBoolean("search_expanded", searchPanel.visibility == View.VISIBLE)
         super.onSaveInstanceState(outState)

@@ -2,6 +2,7 @@ package com.tiger.usbmanager.ui
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
@@ -18,6 +19,7 @@ import com.tiger.usbmanager.R
 internal object DisplaySettings {
     const val DEFAULT_SEED = 0xFF3478F6.toInt()
     private const val FLOATING = "display_floating_bar"
+    private const val VERTICAL = "display_vertical_layout"
     private const val DYNAMIC = "display_dynamic_colors"
     private const val SEED = "display_seed_color"
     private const val MODE = "display_theme_mode"
@@ -28,6 +30,7 @@ internal object DisplaySettings {
     private val cache = mutableMapOf<Key, Map<Int, Int>>()
 
     fun floating() = ModuleSettings.prefs().getBoolean(FLOATING, false)
+    fun verticalLayout() = ModuleSettings.prefs().getBoolean(VERTICAL, false)
     fun dynamic() = ModuleSettings.prefs().getBoolean(DYNAMIC, false)
     fun dynamicAvailable() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     fun mode() = Mode.entries.firstOrNull { it.name == ModuleSettings.prefs().getString(MODE, null) } ?: Mode.SYSTEM
@@ -41,6 +44,7 @@ internal object DisplaySettings {
         }
     }
     fun setFloating(value: Boolean) = ModuleSettings.prefs().edit { putBoolean(FLOATING, value) }
+    fun setVerticalLayout(value: Boolean) = ModuleSettings.prefs().edit { putBoolean(VERTICAL, value) }
     fun setDynamic(value: Boolean) = ModuleSettings.prefs().edit { putBoolean(DYNAMIC, value) }
     fun setSeed(value: Int) = ModuleSettings.prefs().edit { putInt(SEED, value or 0xFF000000.toInt()) }
     fun setMode(value: Mode) = ModuleSettings.prefs().edit { putString(MODE, value.name) }
@@ -57,12 +61,9 @@ internal object DisplaySettings {
 
     fun wrapContext(base: Context): Context {
         ModuleSettings.init(base)
-        val configuration = Configuration(base.resources.configuration)
-        when (mode()) {
-            Mode.LIGHT -> configuration.uiMode = (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_NO
-            Mode.DARK -> configuration.uiMode = (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_YES
-            Mode.SYSTEM -> Unit
-        }
+        // Override only night mode: copying the full configuration freezes orientation
+        // and window dimensions in the chooser's onConfigurationChanged path.
+        val configuration = nightConfiguration()
         val context = base.createConfigurationContext(configuration)
         // Isolate resource overrides per activity; XML and dialogs receive the same palette.
         return runCatching {
@@ -75,8 +76,17 @@ internal object DisplaySettings {
             .onFailure { android.util.Log.w("USBManager", "Palette resource override unavailable", it) }.getOrDefault(context)
     }
 
-    fun apply(activity: Activity) {
+    fun applyOrientation(activity: Activity, unlockedOrientation: Int = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+        val orientation = if (verticalLayout()) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else unlockedOrientation
+        if (activity.requestedOrientation != orientation) {
+            runCatching { activity.requestedOrientation = orientation }
+                .onFailure { android.util.Log.w("USBManager", "Window rejected the requested orientation", it) }
+        }
+    }
+
+    fun apply(activity: Activity, unlockedOrientation: Int = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
         ModuleSettings.init(activity)
+        applyOrientation(activity, unlockedOrientation)
         val dark = isDark(activity)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // The app provides its own light/dark colors; prevent automatic recoloring.

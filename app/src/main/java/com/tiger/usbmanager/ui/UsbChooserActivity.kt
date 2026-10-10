@@ -57,7 +57,7 @@ open class UsbChooserActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        DisplaySettings.apply(this)
+        DisplaySettings.apply(this, android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND)
         super.onCreate(savedInstanceState)
         if (editsDefaultConfiguration) ModuleSettings.init(this)
         token = intent?.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0) ?: 0
@@ -124,10 +124,11 @@ open class UsbChooserActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.attributes = window.attributes.apply { dimAmount = 0.55f }
         window.setGravity(Gravity.CENTER)
-        // Configure after setContentView: floating-window initialization resets the
-        // width to WRAP_CONTENT. MATCH_PARENT then uses the safe window frame,
-        // rather than forcing the full display width across a landscape cutout.
-        window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        // Configure after setContentView, which resets the floating-window width.
+        // Cap wide dialogs while leaving the system's safe window frame in control.
+        val width = dp(minOf(if (landscape()) 840 else 480,
+            (resources.configuration.screenWidthDp - 12).coerceAtLeast(1)))
+        window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     private fun bindViews() {

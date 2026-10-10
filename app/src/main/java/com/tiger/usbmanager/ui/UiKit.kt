@@ -99,7 +99,7 @@ internal fun Context.surfaceCard(radius: Int = 22): MaterialCardView = MaterialC
 
 internal fun Context.pageTitle(textValue: CharSequence): TextView = TextView(this).apply {
     text = textValue
-    textSize = 24f
+    textSize = if (landscape()) 22f else 24f
     setTextColor(uiColor(R.color.text_primary))
     setTypeface(typeface, android.graphics.Typeface.BOLD)
 }
@@ -110,7 +110,7 @@ internal fun Context.sectionLabel(textValue: CharSequence): TextView = TextView(
     isAllCaps = true
     letterSpacing = 0.08f
     setTextColor(uiColor(R.color.text_tertiary))
-    setPadding(dp(4), dp(20), dp(4), dp(9))
+    setPadding(dp(4), dp(if (landscape()) 12 else 20), dp(4), dp(9))
 }
 
 internal fun Context.divider(): View = View(this).apply {
@@ -125,7 +125,7 @@ internal fun Context.toolbar(title: CharSequence, back: (() -> Unit)? = null, ac
     LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(12), dp(10), dp(16), dp(10))
+        setPadding(dp(12), dp(if (landscape()) 4 else 10), dp(16), dp(if (landscape()) 4 else 10))
         if (back != null) addView(ImageView(this@toolbar).apply {
             setImageResource(R.drawable.ic_arrow_back)
             imageTintList = android.content.res.ColorStateList.valueOf(uiColor(R.color.text_primary))
@@ -156,6 +156,7 @@ internal fun verticalMargins(top: Int = 0, bottom: Int = 12): LinearLayout.Layou
     }
 
 internal fun androidx.appcompat.app.AlertDialog.applyUsbDialogColors() {
+    window?.fitLandscapeDialog()
     // Preserve Material's corner shape and insets while explicitly resolving the chosen mode.
     fun tintSurface(drawable: android.graphics.drawable.Drawable?) {
         when (drawable) {
