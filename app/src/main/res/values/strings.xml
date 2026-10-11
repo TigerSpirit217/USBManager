@@ -22,8 +22,8 @@
     <string name="intro_usage_6">6. 点击「获取日志方法」查看如何从 LSPosed 中查阅完整 Hook 日志</string>
 
     <!-- MainActivity config manager / activation -->
-    <string name="settings_view_intro">使用说明</string>
     <string name="settings_module_settings">模块设置</string>
+    <string name="settings_view_intro">使用说明</string>
     <string name="settings_default_mode">默认 USB 模式</string>
     <string name="settings_default_adb">默认开启 USB 调试</string>
     <string name="settings_default_usb_config">默认 USB 配置</string>
@@ -119,7 +119,6 @@
     <string name="auth_saved_config">%1$s%2$s</string>
     <string name="auth_adb_enabled">" + ADB"</string>
     <string name="auth_experimental_badge">实验性</string>
-    <string name="settings_status_section">运行状态</string>
     <string name="settings_logs_description">查看如何在 LSPosed 中获取模块日志</string>
     <string name="developer_name">开发者：TigerSpirit217</string>
     <string name="github_repository">GitHub · USBManager</string>

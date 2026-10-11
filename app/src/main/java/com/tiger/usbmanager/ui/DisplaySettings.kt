@@ -23,6 +23,17 @@ internal object DisplaySettings {
     private const val DYNAMIC = "display_dynamic_colors"
     private const val SEED = "display_seed_color"
     private const val MODE = "display_theme_mode"
+    private const val FLOATING_POSITION = "display_floating_position"
+    private const val STANDARD_POSITION = "display_standard_position"
+    private const val BAR_SIDE = "display_navigation_side"
+    private const val FLOATING_BOTTOM = "display_floating_bottom_position"
+    enum class FloatingPosition(val label: Int, val side: Int = 0) {
+        BOTTOM_CENTER(R.string.bar_bottom_center), BOTTOM_RIGHT(R.string.bar_bottom_right),
+        LEFT_CENTER(R.string.bar_left_center, -1), RIGHT_CENTER(R.string.bar_right_center, 1)
+    }
+    enum class StandardPosition(val label: Int, val side: Int = 0) {
+        BOTTOM(R.string.bar_bottom), LEFT(R.string.bar_left, -1), RIGHT(R.string.bar_right, 1)
+    }
     enum class Mode(val label: Int) {
         SYSTEM(R.string.theme_mode_system), LIGHT(R.string.theme_mode_light), DARK(R.string.theme_mode_dark)
     }
@@ -43,7 +54,39 @@ internal object DisplaySettings {
             "TEAL" -> 0xFF007B83.toInt(); else -> DEFAULT_SEED
         }
     }
-    fun setFloating(value: Boolean) = ModuleSettings.prefs().edit { putBoolean(FLOATING, value) }
+    fun setFloating(value: Boolean) {
+        // Resolve legacy independent positions before switching which type is enabled.
+        val side = storedNavigationSide()
+        ModuleSettings.prefs().edit { putInt(BAR_SIDE, side); putBoolean(FLOATING, value) }
+    }
+    private fun storedNavigationSide(): Int {
+        val prefs = ModuleSettings.prefs()
+        if (prefs.contains(BAR_SIDE)) return prefs.getInt(BAR_SIDE, 0).coerceIn(-1, 1)
+        // Migrate using the position of the currently enabled navigation type.
+        return if (floating()) FloatingPosition.entries.firstOrNull {
+            it.name == prefs.getString(FLOATING_POSITION, null)
+        }?.side ?: 0 else StandardPosition.entries.firstOrNull {
+            it.name == prefs.getString(STANDARD_POSITION, null)
+        }?.side ?: 0
+    }
+    fun floatingPosition(): FloatingPosition = when (storedNavigationSide()) {
+        -1 -> FloatingPosition.LEFT_CENTER
+        1 -> FloatingPosition.RIGHT_CENTER
+        else -> {
+            val prefs = ModuleSettings.prefs()
+            FloatingPosition.entries.firstOrNull {
+                it.side == 0 && it.name == prefs.getString(FLOATING_BOTTOM, prefs.getString(FLOATING_POSITION, null))
+            } ?: FloatingPosition.BOTTOM_RIGHT
+        }
+    }
+    fun standardPosition() = StandardPosition.entries.first { it.side == storedNavigationSide() }
+    fun setFloatingPosition(value: FloatingPosition) = ModuleSettings.prefs().edit {
+        putInt(BAR_SIDE, value.side)
+        if (value.side == 0) putString(FLOATING_BOTTOM, value.name)
+    }
+    fun setStandardPosition(value: StandardPosition) = ModuleSettings.prefs().edit { putInt(BAR_SIDE, value.side) }
+    fun navigationSide(context: Context): Int = if (!context.landscape()) 0
+        else if (floating()) floatingPosition().side else standardPosition().side
     fun setVerticalLayout(value: Boolean) = ModuleSettings.prefs().edit { putBoolean(VERTICAL, value) }
     fun setDynamic(value: Boolean) = ModuleSettings.prefs().edit { putBoolean(DYNAMIC, value) }
     fun setSeed(value: Int) = ModuleSettings.prefs().edit { putInt(SEED, value or 0xFF000000.toInt()) }

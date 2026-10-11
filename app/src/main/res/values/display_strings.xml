@@ -23,6 +23,14 @@
     <string name="status_runtime_unavailable">系统未响应，请确认模块已启用，并在更新模块后重启手机。</string>
     <string name="display_section">显示与主题</string>
     <string name="display_bar_floating">悬浮底栏</string>
+    <string name="display_bar_position">底栏位置</string>
+    <string name="bar_bottom_center">下方居中</string>
+    <string name="bar_bottom_right">位于右下</string>
+    <string name="bar_left_center">左侧居中</string>
+    <string name="bar_right_center">右侧居中</string>
+    <string name="bar_bottom">下方</string>
+    <string name="bar_left">左侧</string>
+    <string name="bar_right">右侧</string>
     <string name="display_vertical_layout">锁定竖直排列</string>
     <string name="settings_advanced_section">高级</string>
     <string name="display_dynamic">动态颜色</string>

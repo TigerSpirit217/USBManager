@@ -45,15 +45,22 @@ class MainActivity : FragmentActivity() {
     private val pageScroll = IntArray(Page.entries.size)
     private var contentHost: PageSwipeHost? = null
     private val pageViews = linkedMapOf<Page, ScrollView>()
+    private val developerFooters = linkedMapOf<Page, LinearLayout>()
     private var navigation: AppNavigationBar? = null
     private var navigationHost: View? = null
     private var mainRoot: LinearLayout? = null
     private var mainBody: FrameLayout? = null
     private var navigationFloating = false
+    private var navigationSide = 0
+    private var navigationGravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
     private var navigationGeneration = 0
     private var appearanceChanging = false
     private val usbStatusPage by lazy { UsbStatusPage(this) }
     private lateinit var activationStatusContainer: LinearLayout
+    private var lastActivationStatus: ModuleActivationCheck.Status? = null
+    private val activationHandler = Handler(Looper.getMainLooper())
+    private var activationGeneration = 0
+    private var activationChecking = false
     private var defaultConfigSummaryView: TextView? = null
     private var gameDndSummaryView: TextView? = null
     private var hasResumed = false
@@ -77,6 +84,10 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         ModuleSettings.init(this)
+        savedInstanceState?.getString("activation_package")?.let {
+            lastActivationStatus = ModuleActivationCheck.Status.Active(it,
+                savedInstanceState.getBoolean("activation_usb_hook"), savedInstanceState.getBoolean("activation_adb_hook"))
+        }
         appearanceChanging = savedInstanceState?.getBoolean("appearance_changing", false) ?: false
         selectedPage = Page.entries.getOrElse(savedInstanceState?.getInt("page", 0) ?: 0) { Page.HOME }
         savedInstanceState?.getIntArray("page_scroll")?.takeIf { it.size == pageScroll.size }?.copyInto(pageScroll)
@@ -93,6 +104,7 @@ class MainActivity : FragmentActivity() {
     private fun showIntro() {
         savePageScroll()
         mainScreenVisible = false
+        cancelActivationCheck()
         usbStatusPage.setVisible(false)
         cancelNavigationTransition()
         contentHost?.cancelScroll()
@@ -161,6 +173,7 @@ class MainActivity : FragmentActivity() {
 
     private fun showConfigManager() {
         cancelNavigationTransition()
+        cancelActivationCheck()
         mainScreenVisible = true
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -170,10 +183,12 @@ class MainActivity : FragmentActivity() {
         mainRoot = root
         contentHost?.cancelScroll()
         pageViews.clear()
+        developerFooters.clear()
         defaultConfigSummaryView = null
         gameDndSummaryView = null
         contentHost = PageSwipeHost(this, selectedPage.ordinal,
             progress = { navigation?.preview(it) }, selected = { onPageSettled(Page.entries[it]) },
+            destinationChanged = { navigation?.selectDestination(it) },
             swipeStarted = { navigation?.followPage() })
         mainBody = FrameLayout(this).apply {
             clipChildren = false
@@ -191,44 +206,85 @@ class MainActivity : FragmentActivity() {
         if (appearanceChanging) { UiMotion.enter(root, 0); appearanceChanging = false }
     }
 
-    @android.annotation.SuppressLint("RtlHardcoded") // Landscape floating navigation stays on the physical right.
+    @android.annotation.SuppressLint("RtlHardcoded") // User-selected left/right positions refer to physical screen edges.
+    private fun barGravity(): Int {
+        val side = DisplaySettings.navigationSide(this)
+        return when {
+            side < 0 -> Gravity.LEFT or Gravity.CENTER_VERTICAL
+            side > 0 -> Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            landscape() && DisplaySettings.floating() && DisplaySettings.floatingPosition() == DisplaySettings.FloatingPosition.BOTTOM_RIGHT -> Gravity.BOTTOM or Gravity.RIGHT
+            else -> Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        }
+    }
+
+    @android.annotation.SuppressLint("RtlHardcoded")
     private fun installNavigationBar(animated: Boolean = false) {
         val root = mainRoot ?: return
         val body = mainBody ?: return
         val floating = DisplaySettings.floating()
+        val side = DisplaySettings.navigationSide(this)
+        val vertical = side != 0
+        val gravity = barGravity()
         navigationFloating = floating
-        navigation = AppNavigationBar(this, floating, Page.entries.map { it.title to it.icon }, selectedPage.ordinal) {
+        navigationSide = side
+        navigationGravity = gravity
+        root.orientation = if (!floating && vertical) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        body.layoutParams = if (!floating && vertical) LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+            else LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        navigation = AppNavigationBar(this, floating, Page.entries.map { it.title to it.icon }, selectedPage.ordinal, vertical) {
             selectPage(Page.entries[it])
         }
-        val host: View = if (floating) FrameLayout(this).apply {
+        val host: View = if (floating) object : FrameLayout(this) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                if (vertical) navigation?.layoutParams?.height = minOf(dp(320),
+                    (MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom).coerceAtLeast(0))
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            }
+        }.apply {
             clipChildren = false
-            setPadding(dp(18), 0, dp(18), dp(if (landscape()) 8 else 12))
-            applySystemBarPadding(includeBottom = true)
+            setPadding(dp(18), if (vertical) dp(12) else 0, dp(18), dp(if (landscape()) 8 else 12))
+            applySystemBarPadding(includeTop = vertical, includeBottom = true)
             val barWidth = minOf(dp(320), dp(resources.configuration.screenWidthDp - 36))
-            addView(navigation, FrameLayout.LayoutParams(barWidth, dp(64),
-                if (landscape()) Gravity.RIGHT else Gravity.CENTER_HORIZONTAL))
+            addView(navigation, FrameLayout.LayoutParams(if (vertical) dp(64) else barWidth,
+                if (vertical) dp(320) else dp(64), gravity))
         } else LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = if (vertical) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             setBackgroundColor(uiColor(R.color.bg_card))
-            applySystemBarPadding(includeBottom = true)
-            addView(View(this@MainActivity).apply { setBackgroundColor(uiColor(R.color.outline)) },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
-            addView(navigation, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (landscape()) 64 else 80)))
+            applySystemBarPadding(includeTop = vertical, includeBottom = true)
+            val line = View(this@MainActivity).apply { setBackgroundColor(uiColor(R.color.outline)) }
+            val lineParams = if (vertical) LinearLayout.LayoutParams(dp(1), ViewGroup.LayoutParams.MATCH_PARENT)
+                else LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
+            val lineFirst = !vertical || (side > 0) != (layoutDirection == View.LAYOUT_DIRECTION_RTL)
+            if (lineFirst) addView(line, lineParams)
+            addView(navigation, if (vertical) LinearLayout.LayoutParams(dp(80), ViewGroup.LayoutParams.MATCH_PARENT)
+                else LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (landscape()) 64 else 80)))
+            if (!lineFirst) addView(line, lineParams)
         }
         navigationHost = host
         if (floating) body.addView(host, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+            if (vertical) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+        else if (vertical) root.addView(host, if ((side < 0) != (root.layoutDirection == View.LAYOUT_DIRECTION_RTL)) 0 else root.childCount,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
         else root.addView(host)
-        pageViews.values.forEach { scroll ->
-            scroll.setPadding(0, 0, 0, if (floating) dp(if (landscape()) 80 else 88) else 0)
-            scroll.applySystemBarPadding(includeBottom = floating)
+        contentHost?.apply {
+            layoutParams = (layoutParams as FrameLayout.LayoutParams).apply {
+                leftMargin = if (floating && side < 0) dp(88) else 0
+                rightMargin = if (floating && side > 0) dp(88) else 0
+            }
+            setVerticalPaging(vertical)
         }
+        pageViews.values.forEach { scroll ->
+            scroll.setPadding(0, 0, 0, if (floating && !vertical) dp(if (landscape()) 80 else 88) else 0)
+            scroll.applySystemBarPadding(includeBottom = floating || vertical)
+        }
+        alignDeveloperFooters(animated)
         if (animated && UiMotion.enabled()) {
             val generation = navigationGeneration
             host.doOnLayout {
                 if (generation == navigationGeneration && mainScreenVisible && !isDestroyed) {
-                    host.translationY = (host.height + dp(24)).toFloat()
-                    host.animate().translationY(0f).setDuration(240)
+                    if (vertical) host.translationX = (side * ((navigation?.width ?: dp(80)) + dp(36))).toFloat()
+                    else host.translationY = (host.height + dp(24)).toFloat()
+                    host.animate().translationX(0f).translationY(0f).setDuration(240)
                         .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
                 }
             }
@@ -242,14 +298,14 @@ class MainActivity : FragmentActivity() {
             when (page) {
                 Page.HOME -> {
                     activationStatusContainer = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
-                    val overview = verticalContent(sectionLabel(getString(R.string.settings_status_section)), activationStatusContainer,
+                    lastActivationStatus?.let(::renderActivationStatus)
+                    val overview = verticalContent(activationStatusContainer,
                         sectionLabel(getString(R.string.auth_section_title)), authenticationCard())
-                    val settings = verticalContent(sectionLabel(getString(R.string.settings_module_settings)), settingsCard())
+                    val settings = verticalContent(settingsCard())
                     if (twoColumns()) addView(adaptiveColumns(overview, settings)) else {
                         // Preserve the established portrait order.
-                        val statusTitle = overview.getChildAt(0); overview.removeView(statusTitle); addView(statusTitle)
                         overview.removeView(activationStatusContainer); addView(activationStatusContainer)
-                        addView(settings)
+                        addView(settings, verticalMargins(top = dp(12), bottom = 0))
                         addView(overview)
                     }
                 }
@@ -265,7 +321,7 @@ class MainActivity : FragmentActivity() {
                 }
             }
             addView(View(this@MainActivity), LinearLayout.LayoutParams(0, 0, 1f))
-            if (page != Page.HOME) addView(developerFooter())
+            addView(developerFooter(page), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -320,6 +376,8 @@ class MainActivity : FragmentActivity() {
     private fun cancelNavigationTransition() {
         navigationGeneration++
         navigationHost?.animate()?.cancel()
+        navigation?.animate()?.cancel()
+        developerFooters.values.forEach { it.animate().cancel() }
     }
 
     private fun changeNavigationBar() {
@@ -331,11 +389,25 @@ class MainActivity : FragmentActivity() {
         }
         cancelNavigationTransition()
         val generation = navigationGeneration
-        if (DisplaySettings.floating() == navigationFloating) {
-            host.animate().translationY(0f).setDuration(180).start()
+        val nextGravity = barGravity()
+        if (landscape() && navigationFloating && DisplaySettings.floating() && navigationSide == 0 &&
+            DisplaySettings.navigationSide(this) == 0 && nextGravity != navigationGravity) {
+            // Reuse the capsule so its selection and drag state survive a horizontal relocation.
+            navigationGravity = nextGravity
+            host.animate().translationX(0f).translationY(0f).setDuration(300)
+                .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+            navigation?.let { alignComponent(it, nextGravity, animated = true) }
+            alignDeveloperFooters(animated = true)
             return
         }
-        host.animate().translationY((host.height + dp(24)).toFloat()).setDuration(180)
+        if (DisplaySettings.floating() == navigationFloating && DisplaySettings.navigationSide(this) == navigationSide && barGravity() == navigationGravity) {
+            host.animate().translationX(0f).translationY(0f).setDuration(180).start()
+            return
+        }
+        val motion = host.animate()
+        if (navigationSide != 0) motion.translationX((navigationSide * ((navigation?.width ?: dp(80)) + dp(36))).toFloat())
+        else motion.translationY((host.height + dp(24)).toFloat())
+        motion.setDuration(180)
             .setInterpolator(android.view.animation.AccelerateInterpolator())
             .withEndAction {
                 if (generation == navigationGeneration && mainScreenVisible && !isFinishing && !isDestroyed) {
@@ -400,6 +472,41 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun refreshActivationStatus() {
+        if (activationChecking || !mainScreenVisible || isDestroyed || isFinishing) return
+        activationChecking = true
+        val request = ++activationGeneration
+        val target = activationStatusContainer
+        var loadingShown = false
+        val showLoading = Runnable {
+            if (request == activationGeneration && mainScreenVisible && !isDestroyed && activationStatusContainer === target) {
+                loadingShown = true
+                showActivationLoading()
+            }
+        }
+        // Keep the last confirmed active card visible during quick re-checks.
+        if (lastActivationStatus is ModuleActivationCheck.Status.Active) activationHandler.postDelayed(showLoading, 1_000L)
+        else showLoading.run()
+        Thread {
+            val status = runCatching { ModuleActivationCheck.check(this) }.getOrElse {
+                android.util.Log.w("USBManager", "Activation check failed", it)
+                ModuleActivationCheck.Status.Unknown(getString(R.string.activate_check_error))
+            }
+            activationHandler.post {
+                if (request != activationGeneration || isDestroyed || activationStatusContainer !== target) return@post
+                activationChecking = false
+                activationHandler.removeCallbacks(showLoading)
+                if (loadingShown || lastActivationStatus != status) renderActivationStatus(status)
+            }
+        }.apply { name = "usb-activation-check"; isDaemon = true }.start()
+    }
+
+    private fun cancelActivationCheck() {
+        activationGeneration++
+        activationChecking = false
+        activationHandler.removeCallbacksAndMessages(null)
+    }
+
+    private fun showActivationLoading() {
         val previousHeight = activationStatusContainer.getChildAt(0)?.height?.takeIf { it > 0 }
         activationStatusContainer.removeAllViews()
         val loadingCard = statusCard(
@@ -411,19 +518,11 @@ class MainActivity : FragmentActivity() {
         )
         if (previousHeight != null) loadingCard.minimumHeight = previousHeight
         activationStatusContainer.addView(loadingCard)
-        val handler = Handler(Looper.getMainLooper())
-        val target = activationStatusContainer
-        Thread {
-            val status = runCatching { ModuleActivationCheck.check(this) }.getOrElse {
-                android.util.Log.w("USBManager", "Activation check failed", it)
-                ModuleActivationCheck.Status.Unknown(getString(R.string.activate_check_error))
-            }
-            handler.post { if (activationStatusContainer === target) renderActivationStatus(status) }
-        }.apply { name = "usb-activation-check"; isDaemon = true }.start()
     }
 
     private fun renderActivationStatus(status: ModuleActivationCheck.Status) {
         if (!::activationStatusContainer.isInitialized || !mainScreenVisible || isDestroyed) return
+        lastActivationStatus = status
         activationStatusContainer.removeAllViews()
         val view = when (status) {
             is ModuleActivationCheck.Status.Active -> statusCard(
@@ -533,7 +632,47 @@ class MainActivity : FragmentActivity() {
         getString(R.string.game_dnd_disabled_summary)
     }
 
-    private fun developerFooter(): LinearLayout = LinearLayout(this).apply {
+    @android.annotation.SuppressLint("RtlHardcoded")
+    private fun footerGravity(): Int = Gravity.TOP or if (landscape() && DisplaySettings.floating() &&
+        DisplaySettings.floatingPosition() == DisplaySettings.FloatingPosition.BOTTOM_RIGHT) Gravity.RIGHT else Gravity.CENTER_HORIZONTAL
+
+    private fun alignDeveloperFooters(animated: Boolean) {
+        developerFooters.values.forEach { alignComponent(it, footerGravity(), animated) }
+    }
+
+    private fun alignComponent(view: View, gravity: Int, animated: Boolean) {
+        view.animate().cancel()
+        val previousX = view.x
+        view.layoutParams = (view.layoutParams as FrameLayout.LayoutParams).apply { this.gravity = gravity }
+        if (!animated || !view.isAttachedToWindow || !UiMotion.enabled()) {
+            view.translationX = 0f
+            return
+        }
+        val generation = navigationGeneration
+        view.doOnLayout {
+            if (generation == navigationGeneration && mainScreenVisible && !isDestroyed) {
+                view.translationX = previousX - view.left
+                view.animate().translationX(0f).setDuration(300)
+                    .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+            }
+        }
+    }
+
+    private fun developerFooter(page: Page): FrameLayout {
+        val contents = developerFooterContents()
+        developerFooters[page] = contents
+        return object : FrameLayout(this) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                // Match the capsule's width and horizontal travel above the bottom navigation.
+                contents.layoutParams.width = minOf(dp(320), MeasureSpec.getSize(widthMeasureSpec))
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            }
+        }.apply {
+            addView(contents, FrameLayout.LayoutParams(dp(320), ViewGroup.LayoutParams.WRAP_CONTENT, footerGravity()))
+        }
+    }
+
+    private fun developerFooterContents(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
         setPadding(dp(12), dp(24), dp(12), dp(8))
@@ -649,6 +788,7 @@ class MainActivity : FragmentActivity() {
         if (hasResumed) {
             defaultConfigSummaryView?.text = defaultConfigSummary()
             gameDndSummaryView?.text = gameDndSummary()
+            if (mainScreenVisible) refreshActivationStatus()
         }
         hasResumed = true
         checkCompatibilityOnEntry()
@@ -667,6 +807,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        cancelActivationCheck()
         cancelNavigationTransition()
         usbStatusPage.destroy()
         cancelCompatibilityCheck()
@@ -676,6 +817,11 @@ class MainActivity : FragmentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         savePageScroll()
+        (lastActivationStatus as? ModuleActivationCheck.Status.Active)?.let {
+            outState.putString("activation_package", it.packageName)
+            outState.putBoolean("activation_usb_hook", it.hasUsbDeviceManagerHook)
+            outState.putBoolean("activation_adb_hook", it.hasAdbHook)
+        }
         outState.putBoolean("appearance_changing", appearanceChanging)
         outState.putInt("page", selectedPage.ordinal)
         outState.putIntArray("page_scroll", pageScroll)

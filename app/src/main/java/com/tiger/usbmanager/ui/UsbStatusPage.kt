@@ -56,7 +56,6 @@ internal class UsbStatusPage(private val activity: Activity) {
     }
 
     fun content(): LinearLayout = with(activity) {
-        val inlineDebugging = landscape()
         colorAnimations.values.forEach { it.cancel() }; colorAnimations.clear(); modeButtons.clear()
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -107,7 +106,7 @@ internal class UsbStatusPage(private val activity: Activity) {
                         }
                     }
                     addView(modeControls)
-                    if (!inlineDebugging) addView(View(activity).apply { setBackgroundColor(uiColor(R.color.outline)) },
+                    addView(View(activity).apply { setBackgroundColor(uiColor(R.color.outline)) },
                         LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply { topMargin = dp(14); bottomMargin = dp(8) })
                     val debugging = LinearLayout(activity).apply {
                         gravity = Gravity.CENTER_VERTICAL
@@ -115,13 +114,10 @@ internal class UsbStatusPage(private val activity: Activity) {
                             orientation = LinearLayout.VERTICAL
                             addView(TextView(activity).apply {
                                 setText(R.string.status_adb_title)
-                                textSize = if (inlineDebugging) 21f else 15f
-                                if (inlineDebugging) setTypeface(typeface, android.graphics.Typeface.BOLD)
+                                textSize = 15f
                                 setTextColor(uiColor(R.color.text_primary))
                             })
-                        }, if (inlineDebugging) LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                            marginEnd = dp(12)
-                        } else LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                         adbSwitch = SwitchMaterial(activity).apply {
                             contentDescription = getString(R.string.status_adb_title)
                             useUsbManagerColors()
@@ -131,9 +127,7 @@ internal class UsbStatusPage(private val activity: Activity) {
                         }
                         addView(adbSwitch)
                     }
-                    if (inlineDebugging) connectionHeader.addView(debugging,
-                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(20) })
-                    else addView(debugging)
+                    addView(debugging)
                     feedback = TextView(activity).apply {
                         textSize = 12f; setTextColor(uiColor(R.color.text_secondary))
                         setPadding(0, dp(12), 0, 0); setLineSpacing(0f, 1.2f)

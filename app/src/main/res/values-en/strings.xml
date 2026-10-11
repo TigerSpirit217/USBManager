@@ -22,8 +22,8 @@
     <string name="intro_usage_6">6. Tap \"How to get logs\" to learn how to view the complete hook log in LSPosed</string>
 
     <!-- MainActivity config manager / activation -->
-    <string name="settings_view_intro">Guide</string>
     <string name="settings_module_settings">Module settings</string>
+    <string name="settings_view_intro">Guide</string>
     <string name="settings_default_mode">Default USB mode</string>
     <string name="settings_default_adb">Default: enable USB debugging</string>
     <string name="settings_default_usb_config">Default USB configuration</string>
@@ -119,7 +119,6 @@
     <string name="auth_saved_config">%1$s%2$s</string>
     <string name="auth_adb_enabled">" + ADB"</string>
     <string name="auth_experimental_badge">Experimental</string>
-    <string name="settings_status_section">Status</string>
     <string name="settings_logs_description">Learn how to find module logs in LSPosed</string>
     <string name="developer_name">Developer: TigerSpirit217</string>
     <string name="github_repository">GitHub · USBManager</string>

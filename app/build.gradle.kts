@@ -12,8 +12,8 @@ android {
         // libxposed API 102 requires API 26. Scheme packages set their own minimum.
         minSdk = 26
         targetSdk = 37
-        versionCode = 7
-        versionName = "7"
+        versionCode = 8
+        versionName = "8"
     }
 
     buildTypes {

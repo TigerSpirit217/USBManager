@@ -14,8 +14,9 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
-import android.widget.Space
 import android.widget.TextView
+import android.widget.BaseAdapter
+import androidx.appcompat.widget.ListPopupWindow
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.TextViewCompat
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -33,6 +34,8 @@ internal class AppearancePage(
     private var pendingChange: Runnable? = null
     private var pendingThemeChange = false
     private var page: LinearLayout? = null
+    private var positionHost: LinearLayout? = null
+    private var positionMenu: ListPopupWindow? = null
 
     fun content() = with(activity) {
         LinearLayout(this).apply {
@@ -41,18 +44,24 @@ internal class AppearancePage(
             addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
                 override fun onViewAttachedToWindow(view: View) = Unit
                 override fun onViewDetachedFromWindow(view: View) {
+                    positionMenu?.dismiss()
                     colorGeneration++; colorAnimation?.cancel()
                 }
             })
             addView(sectionLabel(getString(R.string.display_section)))
             addView(surfaceCard().apply {
-                val wide = twoColumns()
+                val wide = landscape()
                 val themeMode = themeModeRow()
                 val verticalLayout = switchRow(R.string.display_vertical_layout, DisplaySettings.verticalLayout()) {
                     DisplaySettings.setVerticalLayout(it); afterSwitchMotion(layoutChanged)
                 }
                 val floatingBar = switchRow(R.string.display_bar_floating, DisplaySettings.floating()) {
-                    DisplaySettings.setFloating(it); barChanged()
+                    DisplaySettings.setFloating(it); updatePositionRow(animated = true); barChanged()
+                }
+                val positionOptions = LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    positionHost = this
+                    updatePositionRow()
                 }
                 val dynamicColors = switchRow(R.string.display_dynamic,
                     DisplaySettings.dynamic() && DisplaySettings.dynamicAvailable(), DisplaySettings.dynamicAvailable()) {
@@ -64,15 +73,21 @@ internal class AppearancePage(
                 colorRow = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
                     visibility = if (DisplaySettings.dynamic() && DisplaySettings.dynamicAvailable()) View.GONE else View.VISIBLE
-                    addView(divider())
-                    addView(if (wide) pairedRow(themeColor, Space(activity)) else themeColor)
+                    if (!wide) addView(divider())
+                    addView(themeColor)
                 }
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
                     if (wide) {
                         addView(pairedRow(themeMode, verticalLayout))
                         addView(divider())
-                        addView(pairedRow(dynamicColors, floatingBar))
+                        addView(pairedRow(dynamicColors, floatingBar, topAligned = true))
+                        addView(divider())
+                        // Keep the left column's width when only its color control collapses.
+                        addView(pairedRow(LinearLayout(activity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            addView(colorRow)
+                        }, positionOptions, topAligned = true))
                     } else {
                         addView(themeMode)
                         addView(divider())
@@ -81,21 +96,91 @@ internal class AppearancePage(
                         addView(floatingBar)
                         addView(divider())
                         addView(dynamicColors)
+                        addView(colorRow)
                     }
-                    // A separate final row changes the whole card's height when collapsed.
-                    addView(colorRow)
                 })
             })
 
         }
     }
 
-    private fun pairedRow(first: View, second: View) = LinearLayout(activity).apply {
+    private fun updatePositionRow(animated: Boolean = false): Unit = with(activity) {
+        val host = positionHost ?: return@with
+        positionMenu?.dismiss()
+        if (animated && host.isAttachedToWindow && UiMotion.enabled()) {
+            android.transition.TransitionManager.beginDelayedTransition(page,
+                android.transition.AutoTransition().setDuration(240))
+        }
+        host.removeAllViews()
+        host.visibility = if (landscape()) View.VISIBLE else View.GONE
+        if (!landscape()) return@with
+        val label = if (DisplaySettings.floating()) DisplaySettings.floatingPosition().label else DisplaySettings.standardPosition().label
+        host.addView(row(R.string.display_bar_position, getString(label)) { anchor -> showPositionMenu(anchor) }.apply {
+            (getChildAt(1) as TextView).apply {
+                setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_dropdown_arrow, 0)
+                compoundDrawablePadding = dp(8)
+                TextViewCompat.setCompoundDrawableTintList(this, ColorStateList.valueOf(uiColor(R.color.usb_text_secondary)))
+            }
+        })
+    }
+
+    private fun showPositionMenu(anchor: View) = with(activity) {
+        val floating = DisplaySettings.floating()
+        val labels = if (floating) DisplaySettings.FloatingPosition.entries.map { getString(it.label) }
+            else DisplaySettings.StandardPosition.entries.map { getString(it.label) }
+        val selected = if (floating) DisplaySettings.floatingPosition().ordinal else DisplaySettings.standardPosition().ordinal
+        positionMenu?.dismiss()
+        val menu = ListPopupWindow(this)
+        positionMenu = menu
+        menu.apply {
+            anchorView = anchor
+            width = anchor.width
+            isModal = true
+            setBackgroundDrawable(roundedBackground(R.color.bg_card, 16, R.color.outline))
+            setListSelector(Color.TRANSPARENT.toDrawable())
+            setAdapter(object : BaseAdapter() {
+                override fun getCount() = labels.size
+                override fun getItem(position: Int) = labels[position]
+                override fun getItemId(position: Int) = position.toLong()
+                override fun getView(position: Int, recycled: View?, parent: ViewGroup): View =
+                    ((recycled as? TextView) ?: TextView(activity)).apply {
+                        val current = position == selected
+                        text = labels[position]
+                        textSize = 14f
+                        gravity = Gravity.CENTER_VERTICAL
+                        minimumHeight = dp(48)
+                        setPadding(dp(16), dp(12), dp(16), dp(12))
+                        setTextColor(uiColor(if (current) R.color.on_accent_soft else R.color.text_primary))
+                        background = if (current) roundedBackground(R.color.accent_soft, 16) else Color.TRANSPARENT.toDrawable()
+                        setCompoundDrawablesWithIntrinsicBounds(0, 0, if (current) R.drawable.ic_check else 0, 0)
+                        compoundDrawablePadding = dp(12)
+                        TextViewCompat.setCompoundDrawableTintList(this, ColorStateList.valueOf(uiColor(R.color.on_accent_soft)))
+                        isSelected = current
+                        androidx.core.view.ViewCompat.setStateDescription(this,
+                            if (current) getString(R.string.display_selected) else null)
+                    }
+            })
+            setOnItemClickListener { _, _, which, _ ->
+                dismiss()
+                if (which != selected) {
+                    if (floating) DisplaySettings.setFloatingPosition(DisplaySettings.FloatingPosition.entries[which])
+                    else DisplaySettings.setStandardPosition(DisplaySettings.StandardPosition.entries[which])
+                    updatePositionRow()
+                    barChanged()
+                }
+            }
+            setOnDismissListener { if (positionMenu === menu) positionMenu = null }
+            show()
+            setSelection(selected)
+        }
+    }
+
+    private fun pairedRow(first: View, second: View, topAligned: Boolean = false) = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
+        gravity = if (topAligned) Gravity.TOP else Gravity.CENTER_VERTICAL
         isBaselineAligned = false
         listOf(first, second).forEach { cell ->
-            addView(cell, LinearLayout.LayoutParams(0, if (cell is Space) 0 else ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(cell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
     }
 
@@ -231,7 +316,7 @@ internal class AppearancePage(
         }
     }
 
-    private fun row(title: Int, value: String, click: () -> Unit) = with(activity) {
+    private fun row(title: Int, value: String, click: (View) -> Unit) = with(activity) {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; isClickable = true; isFocusable = true
             setPadding(dp(16), dp(14), dp(16), dp(14)); clickFeedback()
@@ -239,7 +324,7 @@ internal class AppearancePage(
             addView(TextView(activity).apply {
                 text = value; textSize = 12f; setTextColor(uiColor(R.color.usb_text_secondary)); setPadding(0, dp(4), 0, 0)
             })
-            setOnClickListener { click() }
+            setOnClickListener { click(it) }
         }
     }
 }

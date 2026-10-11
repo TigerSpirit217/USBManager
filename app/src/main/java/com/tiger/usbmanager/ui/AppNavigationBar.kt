@@ -18,10 +18,10 @@ import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.navigation.NavigationBarView
+import com.google.android.material.navigationrail.NavigationRailView
 import com.google.android.material.shape.ShapeAppearanceModel
 import com.tiger.usbmanager.R
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /** Independently implemented capsule with a continuous indicator, tap and drag selection. */
 @android.annotation.SuppressLint("ViewConstructor", "RtlHardcoded") // Programmatic view; indicator uses physical coordinates with explicit RTL mapping.
@@ -30,11 +30,12 @@ internal class AppNavigationBar(
     private val floating: Boolean,
     entries: List<Pair<Int, Int>>,
     selected: Int,
+    private val vertical: Boolean = false,
     private val onSelected: (Int) -> Unit,
 ) : FrameLayout(context) {
     private val indicator = View(context)
     private val tabs = mutableListOf<Pair<ImageView, TextView>>()
-    private var material: BottomNavigationView? = null
+    private var material: NavigationBarView? = null
     private var index = selected
     private var downX = 0f
     private var downY = 0f
@@ -56,7 +57,8 @@ internal class AppNavigationBar(
                 setStroke(context.dp(1), ColorUtils.blendARGB(context.uiColor(R.color.outline), context.uiColor(R.color.bg_card), 0.5f))
             }
             elevation = context.dp(6).toFloat()
-            addView(indicator, LayoutParams(0, context.dp(56), Gravity.TOP or Gravity.LEFT).apply {
+            addView(indicator, LayoutParams(if (vertical) context.dp(56) else 0,
+                if (vertical) 0 else context.dp(56), Gravity.TOP or Gravity.LEFT).apply {
                 topMargin = context.dp(4); leftMargin = context.dp(4)
             })
             indicator.background = GradientDrawable().apply {
@@ -64,7 +66,11 @@ internal class AppNavigationBar(
                 cornerRadius = context.dp(28).toFloat()
             }
             indicator.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-            val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; setPadding(context.dp(4), 0, context.dp(4), 0) }
+            val row = LinearLayout(context).apply {
+                orientation = if (vertical) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+                setPadding(if (vertical) 0 else context.dp(4), if (vertical) context.dp(4) else 0,
+                    if (vertical) 0 else context.dp(4), if (vertical) context.dp(4) else 0)
+            }
             entries.forEachIndexed { position, (title, icon) ->
                 row.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
@@ -80,11 +86,16 @@ internal class AppNavigationBar(
                         select(position, true)
                         onSelected(position)
                     }
-                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+                }, if (vertical) LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+                    else LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
             }
             addView(row, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         } else {
-            material = BottomNavigationView(context).apply {
+            val bar: NavigationBarView = if (vertical) NavigationRailView(context).apply {
+                menuGravity = Gravity.CENTER
+                itemMinimumHeight = context.dp(80)
+            } else BottomNavigationView(context)
+            material = bar.apply {
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 elevation = 0f
                 ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets -> insets }
@@ -92,6 +103,7 @@ internal class AppNavigationBar(
                 itemIconTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
                     intArrayOf(context.uiColor(R.color.usb_accent), context.uiColor(R.color.usb_icon_inactive)))
                 itemTextColor = itemIconTintList
+                itemRippleColor = null
                 isItemActiveIndicatorEnabled = true
                 itemActiveIndicatorColor = ColorStateList.valueOf(context.uiColor(R.color.accent_soft))
                 itemActiveIndicatorWidth = context.dp(64); itemActiveIndicatorHeight = context.dp(32)
@@ -125,16 +137,21 @@ internal class AppNavigationBar(
         updateIndicator(animated)
     }
 
-    /** Page drag progress is fractional, so the capsule and icon colors follow the page itself. */
+    /** Only the floating capsule follows fractional progress; ordinary tabs select the destination. */
     fun preview(position: Float) {
+        if (!floating) return
         previewPosition = position
         if (dragging || releaseTarget != null) return
-        syncMaterial(position.roundToInt())
-        if (!floating || width == 0) return
+        if (width == 0) return
         indicator.animate().cancel()
-        val physical = if (layoutDirection == LAYOUT_DIRECTION_RTL) tabs.lastIndex - position else position
-        indicator.translationX = physical * tabWidth()
+        val physical = if (!vertical && layoutDirection == LAYOUT_DIRECTION_RTL) tabs.lastIndex - position else position
+        moveIndicator(physical * tabSize())
         updateFloatingHighlight()
+    }
+
+    /** Ordinary selection updates as soon as a swipe or navigation request chooses a destination. */
+    fun selectDestination(position: Int) {
+        if (!floating) select(position, false)
     }
 
     /** Direct page swipes take back control from a previous bottom-bar release. */
@@ -152,32 +169,39 @@ internal class AppNavigationBar(
         }
     }
 
-    private fun physical(position: Int) = if (layoutDirection == LAYOUT_DIRECTION_RTL) tabs.lastIndex - position else position
-    private fun tabWidth() = ((width - context.dp(8)).toFloat() / tabs.size.coerceAtLeast(1)).coerceAtLeast(0f)
+    private fun physical(position: Int) = if (!vertical && layoutDirection == LAYOUT_DIRECTION_RTL) tabs.lastIndex - position else position
+    private fun tabSize() = (((if (vertical) height else width) - context.dp(8)).toFloat() / tabs.size.coerceAtLeast(1)).coerceAtLeast(0f)
+    private fun indicatorPosition() = if (vertical) indicator.translationY else indicator.translationX
+    private fun moveIndicator(position: Float) {
+        if (vertical) indicator.translationY = position else indicator.translationX = position
+    }
+    private fun axis(event: MotionEvent) = if (vertical) event.y else event.x
     private fun updateIndicator(animated: Boolean) {
         if (!floating || width == 0) return
-        val slot = tabWidth()
+        val slot = tabSize()
         val target = physical(index) * slot
         indicator.animate().cancel()
         if (animated && UiMotion.enabled()) {
             updateFloatingHighlight()
-            indicator.animate().translationX(target).setDuration(340)
+            val motion = indicator.animate()
+            if (vertical) motion.translationY(target) else motion.translationX(target)
+            motion.setDuration(340)
                 .setInterpolator(OvershootInterpolator(0.65f))
                 .setUpdateListener { updateFloatingHighlight() }
                 .withEndAction { releaseTarget = null }.start()
         } else {
-            indicator.translationX = target
+            moveIndicator(target)
             updateFloatingHighlight()
         }
     }
 
     private fun updateFloatingHighlight() {
-        val slot = tabWidth()
+        val slot = tabSize()
         if (slot <= 0f) return
         val normal = context.uiColor(R.color.usb_icon_inactive)
         val active = context.uiColor(R.color.usb_accent)
         tabs.forEachIndexed { position, (icon, label) ->
-            val coverage = (1f - abs(physical(position) * slot - indicator.translationX) / slot).coerceIn(0f, 1f)
+            val coverage = (1f - abs(physical(position) * slot - indicatorPosition()) / slot).coerceIn(0f, 1f)
             val color = ColorUtils.blendARGB(normal, active, coverage)
             icon.imageTintList = ColorStateList.valueOf(color)
             label.setTextColor(color)
@@ -187,8 +211,9 @@ internal class AppNavigationBar(
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         if (floating) {
             // Size the child before FrameLayout measures it; changing it during layout leaves a zero-width first frame.
-            val available = (MeasureSpec.getSize(widthMeasureSpec) - context.dp(8)).coerceAtLeast(0)
-            indicator.layoutParams.width = available / tabs.size.coerceAtLeast(1)
+            val available = (MeasureSpec.getSize(if (vertical) heightMeasureSpec else widthMeasureSpec) - context.dp(8)).coerceAtLeast(0)
+            if (vertical) indicator.layoutParams.height = available / tabs.size.coerceAtLeast(1)
+            else indicator.layoutParams.width = available / tabs.size.coerceAtLeast(1)
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
@@ -202,7 +227,8 @@ internal class AppNavigationBar(
         if (!floating) return super.onInterceptTouchEvent(event)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; dragging = false }
-            MotionEvent.ACTION_MOVE -> if (abs(event.x - downX) > slop && abs(event.x - downX) > abs(event.y - downY)) {
+            MotionEvent.ACTION_MOVE -> if ((if (vertical) abs(event.y - downY) else abs(event.x - downX)) > slop &&
+                (if (vertical) abs(event.y - downY) > abs(event.x - downX) else abs(event.x - downX) > abs(event.y - downY))) {
                 dragging = true; parent.requestDisallowInterceptTouchEvent(true); indicator.animate().cancel(); return true
             }
         }
@@ -211,14 +237,14 @@ internal class AppNavigationBar(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!floating || !dragging) return super.onTouchEvent(event)
-        val slot = tabWidth()
+        val slot = tabSize()
         if (slot <= 0f) return true
         when (event.actionMasked) {
-            MotionEvent.ACTION_MOVE -> dragIndicator(event.x, slot)
+            MotionEvent.ACTION_MOVE -> dragIndicator(axis(event), slot)
             MotionEvent.ACTION_UP -> {
-                dragIndicator(event.x, slot)
-                val physical = ((event.x - context.dp(4)) / slot).toInt().coerceIn(0, tabs.lastIndex)
-                val target = if (layoutDirection == LAYOUT_DIRECTION_RTL) tabs.lastIndex - physical else physical
+                dragIndicator(axis(event), slot)
+                val physical = ((axis(event) - context.dp(4)) / slot).toInt().coerceIn(0, tabs.lastIndex)
+                val target = if (!vertical && layoutDirection == LAYOUT_DIRECTION_RTL) tabs.lastIndex - physical else physical
                 dragging = false; select(target, true, fromDrag = true); onSelected(target)
                 performClick()
                 performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
@@ -232,8 +258,8 @@ internal class AppNavigationBar(
         return true
     }
 
-    private fun dragIndicator(x: Float, slot: Float) {
-        indicator.translationX = (x - context.dp(4) - slot / 2).coerceIn(0f, slot * tabs.lastIndex)
+    private fun dragIndicator(coordinate: Float, slot: Float) {
+        moveIndicator((coordinate - context.dp(4) - slot / 2).coerceIn(0f, slot * tabs.lastIndex))
         updateFloatingHighlight()
     }
 
