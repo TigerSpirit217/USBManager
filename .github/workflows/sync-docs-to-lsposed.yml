@@ -1,0 +1,73 @@
+name: Sync Docs to LSPosed
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - README.md
+      - README_ENG.md
+      - LICENSE
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lsposed-docs
+  cancel-in-progress: false
+
+jobs:
+  sync-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout latest source docs
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Sync README and LICENSE
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.LSPOSED_SYNC_TOKEN }}
+          script: |
+            const fs = require('node:fs/promises');
+            const target = { owner: 'Xposed-Modules-Repo', repo: 'com.tiger.usbmanager' };
+            const { data: repository } = await github.rest.repos.get(target);
+            const branch = repository.default_branch;
+
+            for (const path of ['README.md', 'README_ENG.md', 'LICENSE']) {
+              let local;
+              try {
+                local = await fs.readFile(path);
+              } catch (error) {
+                if (error.code !== 'ENOENT') throw error;
+              }
+
+              let remote;
+              try {
+                const response = await github.rest.repos.getContent({ ...target, path, ref: branch });
+                remote = response.data;
+                if (remote.type !== 'file') throw new Error(`${path} is not a file in the target repo`);
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+
+              const message = `docs: sync ${path} from ${context.repo.owner}/${context.repo.repo}`;
+              if (!local) {
+                if (remote) {
+                  await github.rest.repos.deleteFile({ ...target, path, branch, message, sha: remote.sha });
+                  core.info(`Deleted ${path}`);
+                }
+                continue;
+              }
+              if (remote && local.equals(Buffer.from(remote.content, 'base64'))) {
+                core.info(`${path} is unchanged`);
+                continue;
+              }
+              await github.rest.repos.createOrUpdateFileContents({
+                ...target, path, branch, message,
+                content: local.toString('base64'),
+                ...(remote ? { sha: remote.sha } : {}),
+              });
+              core.info(`Synced ${path}`);
+            }

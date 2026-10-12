@@ -14,6 +14,11 @@ android {
         targetSdk = 37
         versionCode = 8
         versionName = "8"
+
+        // GitHub CI passes this property; local builds use the version fields above.
+        providers.gradleProperty("ciVersionName").orNull?.let { ciVersionName ->
+            versionName = ciVersionName
+        }
     }
 
     buildTypes {

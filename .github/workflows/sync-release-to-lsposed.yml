@@ -1,0 +1,89 @@
+name: Sync New Release to LSPosed
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lsposed-release-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  sync-release:
+    if: github.event.release.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy release and assets
+        uses: actions/github-script@v8
+        env:
+          SOURCE_TOKEN: ${{ github.token }}
+        with:
+          github-token: ${{ secrets.LSPOSED_SYNC_TOKEN }}
+          script: |
+            const source = context.payload.release;
+            if (context.payload.action !== 'published' || source.draft) return;
+
+            const target = { owner: 'Xposed-Modules-Repo', repo: 'com.tiger.usbmanager' };
+            // Include drafts and all pages so a failed upload can be resumed on rerun.
+            const releases = await github.paginate(github.rest.repos.listReleases, { ...target, per_page: 100 });
+            let release = releases.find(item => item.tag_name === source.tag_name);
+            if (release && !release.draft) {
+              core.info(`Release ${source.tag_name} already exists; skipping`);
+              return;
+            }
+
+            const metadata = {
+              name: source.name || source.tag_name,
+              body: source.body || '',
+              prerelease: source.prerelease,
+            };
+            if (!release) {
+              const response = await github.rest.repos.createRelease({
+                ...target, ...metadata, tag_name: source.tag_name, draft: true,
+              });
+              release = response.data;
+            } else {
+              await github.rest.repos.updateRelease({ ...target, ...metadata, release_id: release.id });
+            }
+
+            // Use the publication payload so later edits are not mirrored.
+            const assets = source.assets;
+            const existingAssets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              ...target, release_id: release.id, per_page: 100,
+            });
+            for (const asset of assets) {
+              const existing = existingAssets.find(item => item.name === asset.name);
+              if (existing && existing.state === 'uploaded' && existing.size === asset.size &&
+                  (!asset.digest || asset.digest === existing.digest)) {
+                core.info(`${asset.name} already uploaded`);
+                continue;
+              }
+              if (existing) {
+                await github.rest.repos.deleteReleaseAsset({ ...target, asset_id: existing.id });
+              }
+              const response = await fetch(asset.url, {
+                headers: {
+                  Authorization: `Bearer ${process.env.SOURCE_TOKEN}`,
+                  Accept: 'application/octet-stream',
+                },
+              });
+              if (!response.ok) throw new Error(`Download ${asset.name} failed: HTTP ${response.status}`);
+              const data = Buffer.from(await response.arrayBuffer());
+              if (data.length !== asset.size) throw new Error(`Size mismatch for ${asset.name}`);
+              await github.rest.repos.uploadReleaseAsset({
+                ...target, release_id: release.id, name: asset.name, label: asset.label || '',
+                data,
+                headers: {
+                  'content-type': asset.content_type || 'application/octet-stream',
+                  'content-length': data.length,
+                },
+              });
+              core.info(`Uploaded ${asset.name}`);
+            }
+
+            // Publish only after all assets have been uploaded successfully.
+            await github.rest.repos.updateRelease({ ...target, release_id: release.id, draft: false });
+            core.info(`Synced release ${source.tag_name}`);
