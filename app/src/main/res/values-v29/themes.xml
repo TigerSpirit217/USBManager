@@ -1,0 +1,10 @@
+<resources>
+    <style name="ThemeOverlay.USBManager.Colors.Light" parent="ThemeOverlay.USBManager.Colors">
+        <item name="isLightTheme">true</item>
+        <item name="android:isLightTheme">true</item>
+    </style>
+    <style name="ThemeOverlay.USBManager.Colors.Dark" parent="ThemeOverlay.USBManager.Colors">
+        <item name="isLightTheme">false</item>
+        <item name="android:isLightTheme">false</item>
+    </style>
+</resources>

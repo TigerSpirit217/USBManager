@@ -1,13 +1,31 @@
 <resources>
     <style name="ThemeOverlay.USBManager.Colors" parent="">
+        <item name="appAccent">@color/usb_accent</item>
+        <item name="appAccentPressed">@color/usb_accent_pressed</item>
+        <item name="appOnAccent">@color/on_usb_accent</item>
+        <item name="appAccentSoft">@color/usb_accent_soft</item>
+        <item name="appOnAccentSoft">@color/on_accent_soft</item>
         <item name="colorPrimary">@color/usb_accent</item>
+        <item name="colorPrimaryVariant">@color/usb_accent_pressed</item>
         <item name="colorSecondary">@color/usb_accent</item>
         <item name="colorOnPrimary">@color/on_usb_accent</item>
+        <item name="colorOnSecondary">@color/on_usb_accent</item>
         <item name="colorSurface">@color/bg_card</item>
         <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorControlNormal">@color/usb_icon_inactive</item>
+        <item name="colorControlActivated">@color/usb_accent</item>
+        <item name="colorControlHighlight">@color/control_ripple</item>
+        <item name="android:colorAccent">@color/usb_accent</item>
+        <item name="android:colorControlNormal">@color/usb_icon_inactive</item>
+        <item name="android:colorControlActivated">@color/usb_accent</item>
+        <item name="android:colorControlHighlight">@color/control_ripple</item>
         <item name="android:colorBackground">@color/bg_page</item>
+        <item name="android:colorBackgroundFloating">@color/bg_card</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
         <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:textColorHint">@color/text_tertiary</item>
+        <item name="android:textColorHighlight">@color/control_ripple</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.USBManager.AlertDialog</item>
     </style>
     <style name="ThemeOverlay.USBManager.Colors.Light" parent="ThemeOverlay.USBManager.Colors">
         <item name="isLightTheme">true</item>
@@ -32,8 +50,8 @@
         <item name="android:colorAccent">?attr/appAccent</item>
         <item name="colorControlActivated">?attr/appAccent</item>
         <item name="android:colorControlActivated">?attr/appAccent</item>
-        <item name="colorControlHighlight">?attr/appAccentSoft</item>
-        <item name="android:colorControlHighlight">?attr/appAccentSoft</item>
+        <item name="colorControlHighlight">@color/control_ripple</item>
+        <item name="android:colorControlHighlight">@color/control_ripple</item>
         <item name="android:buttonTint">@color/control_button_tint</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@color/bg_page</item>
@@ -69,8 +87,8 @@
         <item name="android:colorAccent">?attr/appAccent</item>
         <item name="colorControlActivated">?attr/appAccent</item>
         <item name="android:colorControlActivated">?attr/appAccent</item>
-        <item name="colorControlHighlight">?attr/appAccentSoft</item>
-        <item name="android:colorControlHighlight">?attr/appAccentSoft</item>
+        <item name="colorControlHighlight">@color/control_ripple</item>
+        <item name="android:colorControlHighlight">@color/control_ripple</item>
         <item name="android:buttonTint">@color/control_button_tint</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>

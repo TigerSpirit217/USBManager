@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.os.Bundle
 import android.text.Editable
 import android.text.InputFilter
 import android.text.TextWatcher
@@ -20,13 +21,35 @@ import com.google.android.material.slider.Slider
 import com.tiger.usbmanager.R
 
 /** HSV and hex edit one seed; previews show the generated palette before saving. */
-internal class ThemeColorDialog(private val activity: Activity, private val save: (Int) -> Unit) {
+internal class ThemeColorDialog(
+    private val activity: Activity,
+    private val save: (Int) -> Unit,
+    private val dismissed: () -> Unit,
+) {
     private val hsv = FloatArray(3).also { Color.colorToHSV(DisplaySettings.seed(), it) }
     private var binding = false
     private val sliders = mutableListOf<Slider>()
     private val values = mutableListOf<TextView>()
+    private var dialog: androidx.appcompat.app.AlertDialog? = null
+    private var colorInput: EditText? = null
+    private var scroll: ScrollView? = null
 
-    fun show() = with(activity) {
+    fun saveState(): Bundle? = if (dialog?.isShowing == true) Bundle().apply {
+        putFloatArray("hsv", hsv.copyOf())
+        colorInput?.let {
+            putString("input", it.text.toString())
+            putInt("selection_start", it.selectionStart)
+            putInt("selection_end", it.selectionEnd)
+            putBoolean("focused", it.hasFocus())
+            putCharSequence("error", it.error)
+        }
+        putInt("scroll", scroll?.scrollY ?: 0)
+    } else null
+
+    fun dismiss() { dialog?.dismiss() }
+
+    fun show(savedState: Bundle? = null) = with(activity) {
+        savedState?.getFloatArray("hsv")?.takeIf { it.size == 3 }?.copyInto(hsv)
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), dp(12))
@@ -35,14 +58,15 @@ internal class ThemeColorDialog(private val activity: Activity, private val save
         val adjustments = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val swatch = View(this).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
         val input = EditText(this).apply {
+            useUsbManagerColors()
             isSingleLine = true; textSize = 17f; typeface = android.graphics.Typeface.MONOSPACE
             hint = "#RRGGBB"; setText(DisplaySettings.hex(DisplaySettings.seed()))
             setTextColor(uiColor(R.color.text_primary))
             filters = arrayOf(InputFilter.LengthFilter(7))
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             contentDescription = getString(R.string.theme_hex)
-            backgroundTintList = ColorStateList.valueOf(uiColor(R.color.usb_accent))
         }
+        colorInput = input
         details.addView(LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             addView(swatch, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(16) })
@@ -92,6 +116,7 @@ internal class ThemeColorDialog(private val activity: Activity, private val save
                 thumbTintList = ColorStateList.valueOf(uiColor(R.color.usb_accent))
                 trackActiveTintList = thumbTintList
                 trackInactiveTintList = ColorStateList.valueOf(uiColor(R.color.accent_soft))
+                haloTintList = ColorStateList.valueOf(uiColor(R.color.control_ripple))
                 contentDescription = getString(label)
                 addOnChangeListener { _, value, fromUser ->
                     if (fromUser && !binding) { hsv[i] = if (i == 0) value else value / 100f; update() }
@@ -138,18 +163,39 @@ internal class ThemeColorDialog(private val activity: Activity, private val save
             column.addView(details); column.addView(adjustments); column.addView(explanation); column.addView(presets)
         }
         update()
-        val dialog = MaterialAlertDialogBuilder(this).setTitle(R.string.display_theme_color)
-            .setView(ScrollView(this).apply { addView(column) })
+        val scrollView = ScrollView(this).apply { addView(column) }
+        scroll = scrollView
+        val alert = MaterialAlertDialogBuilder(this).setTitle(R.string.display_theme_color)
+            .setView(scrollView)
             .setNegativeButton(R.string.dialog_cancel, null).setPositiveButton(R.string.chooser_confirm, null).create()
-        dialog.setOnShowListener {
-            dialog.applyUsbDialogColors()
-            dialog.window?.fitLandscapeDialog(720)
+        dialog = alert
+        alert.setOnDismissListener {
+            dialog = null
+            dismissed()
+        }
+        alert.setOnShowListener {
+            alert.applyUsbDialogColors()
+            alert.window?.fitLandscapeDialog(720)
             UiMotion.enter(column)
-            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+            savedState?.let { state ->
+                // Keep incomplete hex text as well as the last valid preview color.
+                binding = true
+                input.setText(state.getString("input", DisplaySettings.hex(Color.HSVToColor(hsv))))
+                binding = false
+                input.error = state.getCharSequence("error")
+                if (state.getBoolean("focused")) input.requestFocus()
+                input.setSelection(state.getInt("selection_start", input.length()).coerceIn(0, input.length()),
+                    state.getInt("selection_end", input.length()).coerceIn(0, input.length()))
+                scrollView.post { scrollView.scrollTo(0, state.getInt("scroll")) }
+            }
+            alert.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                 if (!input.text.toString().matches(Regex("#[0-9a-fA-F]{6}"))) { input.error = getString(R.string.theme_hex_invalid); return@setOnClickListener }
-                save(Color.HSVToColor(hsv)); dialog.dismiss()
+                // Close first so recreation cannot save an already committed draft.
+                val selected = Color.HSVToColor(hsv)
+                alert.dismiss()
+                save(selected)
             }
         }
-        dialog.show()
+        alert.show()
     }
 }

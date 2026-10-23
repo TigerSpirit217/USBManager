@@ -55,6 +55,7 @@ class MainActivity : FragmentActivity() {
     private var navigationGravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
     private var navigationGeneration = 0
     private var appearanceChanging = false
+    private var themeColorDialog: ThemeColorDialog? = null
     private val usbStatusPage by lazy { UsbStatusPage(this) }
     private lateinit var activationStatusContainer: LinearLayout
     private var lastActivationStatus: ModuleActivationCheck.Status? = null
@@ -99,6 +100,7 @@ class MainActivity : FragmentActivity() {
                 else -> finish()
             }
         }
+        savedInstanceState?.getBundle("theme_color_editor")?.let(::showThemeColorDialog)
     }
 
     private fun showIntro() {
@@ -313,7 +315,8 @@ class MainActivity : FragmentActivity() {
                 Page.SETTINGS -> {
                     addView(AppearancePage(this@MainActivity,
                         themeChanged = { changeAppearance() }, barChanged = { changeNavigationBar() },
-                        layoutChanged = { savePageScroll(); DisplaySettings.applyOrientation(this@MainActivity) }).content())
+                        layoutChanged = { savePageScroll(); DisplaySettings.applyOrientation(this@MainActivity) },
+                        editThemeColor = { showThemeColorDialog() }).content())
                     addView(sectionLabel(getString(R.string.settings_advanced_section)))
                     addView(surfaceCard().apply {
                         addView(valueRow(getString(R.string.action_get_logs), getString(R.string.settings_logs_description)) { showHowToGetLogs() })
@@ -364,6 +367,13 @@ class MainActivity : FragmentActivity() {
         navigation?.select(page.ordinal, false)
         if (changed && page == Page.HOME) refreshActivationStatus()
         checkCompatibilityOnEntry()
+    }
+
+    private fun showThemeColorDialog(savedState: Bundle? = null) {
+        if (themeColorDialog != null) return
+        themeColorDialog = ThemeColorDialog(this,
+            save = { DisplaySettings.setSeed(it); changeAppearance() },
+            dismissed = { themeColorDialog = null }).also { it.show(savedState) }
     }
 
     private fun changeAppearance() {
@@ -807,6 +817,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        themeColorDialog?.dismiss()
         cancelActivationCheck()
         cancelNavigationTransition()
         usbStatusPage.destroy()
@@ -816,6 +827,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        themeColorDialog?.saveState()?.let { outState.putBundle("theme_color_editor", it) }
         savePageScroll()
         (lastActivationStatus as? ModuleActivationCheck.Status.Active)?.let {
             outState.putString("activation_package", it.packageName)

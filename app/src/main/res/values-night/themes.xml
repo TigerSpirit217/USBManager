@@ -16,8 +16,8 @@
         <item name="android:colorAccent">?attr/appAccent</item>
         <item name="colorControlActivated">?attr/appAccent</item>
         <item name="android:colorControlActivated">?attr/appAccent</item>
-        <item name="colorControlHighlight">?attr/appAccentSoft</item>
-        <item name="android:colorControlHighlight">?attr/appAccentSoft</item>
+        <item name="colorControlHighlight">@color/control_ripple</item>
+        <item name="android:colorControlHighlight">@color/control_ripple</item>
         <item name="android:buttonTint">@color/control_button_tint</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@color/bg_page</item>
@@ -53,8 +53,8 @@
         <item name="android:colorAccent">?attr/appAccent</item>
         <item name="colorControlActivated">?attr/appAccent</item>
         <item name="android:colorControlActivated">?attr/appAccent</item>
-        <item name="colorControlHighlight">?attr/appAccentSoft</item>
-        <item name="android:colorControlHighlight">?attr/appAccentSoft</item>
+        <item name="colorControlHighlight">@color/control_ripple</item>
+        <item name="android:colorControlHighlight">@color/control_ripple</item>
         <item name="android:buttonTint">@color/control_button_tint</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>

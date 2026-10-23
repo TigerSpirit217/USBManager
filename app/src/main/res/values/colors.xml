@@ -36,6 +36,7 @@
     <color name="surface_variant">#FFF7F9FC</color>
     <color name="outline">#FFE2E7EF</color>
     <color name="accent_soft">#FFEAF2FF</color>
+    <color name="control_ripple">#203478F6</color>
     <color name="on_accent_soft">#FF1859B7</color>
     <color name="scrim">#85000000</color>
 

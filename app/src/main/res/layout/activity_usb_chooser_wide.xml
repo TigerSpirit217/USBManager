@@ -77,34 +77,34 @@
 
                     <include
                         android:id="@+id/option_charging"
-                        layout="@layout/view_usb_mode_option"
+                        layout="@layout/view_usb_mode_option_wide"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_weight="1" />
                     <include
                         android:id="@+id/option_mtp"
-                        layout="@layout/view_usb_mode_option"
+                        layout="@layout/view_usb_mode_option_wide"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginStart="8dp"
                         android:layout_weight="1" />
                     <include
                         android:id="@+id/option_ptp"
-                        layout="@layout/view_usb_mode_option"
+                        layout="@layout/view_usb_mode_option_wide"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginStart="8dp"
                         android:layout_weight="1" />
                     <include
                         android:id="@+id/option_rndis"
-                        layout="@layout/view_usb_mode_option"
+                        layout="@layout/view_usb_mode_option_wide"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginStart="8dp"
                         android:layout_weight="1" />
                     <include
                         android:id="@+id/option_midi"
-                        layout="@layout/view_usb_mode_option"
+                        layout="@layout/view_usb_mode_option_wide"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginStart="8dp"

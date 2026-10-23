@@ -9,7 +9,11 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import com.tiger.usbmanager.R
 
-internal fun Context.landscape() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+/** Near-square windows favor the vertical layout, including unfolded and split-screen windows. */
+internal fun Context.landscape(): Boolean = with(resources.configuration) {
+    if (screenWidthDp > 0 && screenHeightDp > 0) screenWidthDp.toLong() * 5 > screenHeightDp.toLong() * 6
+    else orientation == Configuration.ORIENTATION_LANDSCAPE
+}
 internal fun Context.twoColumns() = landscape() && resources.configuration.screenWidthDp >= 600 && resources.configuration.fontScale <= 1.35f
 
 /** Bound long rows on wide displays without losing the safe-window height or scrolling. */

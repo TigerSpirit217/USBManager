@@ -39,6 +39,7 @@ internal fun View.applySystemBarPadding(includeTop: Boolean = false, includeBott
 }
 
 internal fun SwitchMaterial.useUsbManagerColors() {
+    useUsbManagerRipple()
     setUseMaterialThemeColors(false)
     thumbTintList = context.controlColors()
     trackTintList = android.content.res.ColorStateList(
@@ -54,6 +55,23 @@ internal fun Context.controlColors() = android.content.res.ColorStateList(
 
 internal fun CheckBox.useUsbManagerColors() {
     CompoundButtonCompat.setButtonTintList(this, context.controlColors())
+    setTextColor(context.uiColor(R.color.text_primary))
+    useUsbManagerRipple()
+}
+
+internal fun android.widget.EditText.useUsbManagerColors() {
+    setTextColor(context.uiColor(R.color.text_primary))
+    setHintTextColor(context.uiColor(R.color.text_tertiary))
+    highlightColor = androidx.core.graphics.ColorUtils.setAlphaComponent(context.uiColor(R.color.usb_accent), 64)
+    backgroundTintList = android.content.res.ColorStateList(
+        arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
+        intArrayOf(context.uiColor(R.color.usb_accent), context.uiColor(R.color.usb_icon_inactive)))
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+        textCursorDrawable = textCursorDrawable?.mutate()?.apply { setTint(context.uiColor(R.color.usb_accent)) }
+        textSelectHandle?.mutate()?.let { it.setTint(context.uiColor(R.color.usb_accent)); setTextSelectHandle(it) }
+        textSelectHandleLeft?.mutate()?.let { it.setTint(context.uiColor(R.color.usb_accent)); setTextSelectHandleLeft(it) }
+        textSelectHandleRight?.mutate()?.let { it.setTint(context.uiColor(R.color.usb_accent)); setTextSelectHandleRight(it) }
+    }
 }
 
 internal fun MaterialButton.useUsbManagerPrimaryColors() {
@@ -62,13 +80,14 @@ internal fun MaterialButton.useUsbManagerPrimaryColors() {
         intArrayOf(context.uiColor(R.color.usb_indicator_inactive), context.uiColor(R.color.usb_accent_pressed), context.uiColor(R.color.usb_accent)))
     setTextColor(context.uiColor(R.color.on_usb_accent))
     iconTint = android.content.res.ColorStateList.valueOf(context.uiColor(R.color.on_usb_accent))
-    rippleColor = android.content.res.ColorStateList.valueOf(context.uiColor(R.color.usb_accent_soft))
+    rippleColor = android.content.res.ColorStateList.valueOf(
+        androidx.core.graphics.ColorUtils.setAlphaComponent(context.uiColor(R.color.on_usb_accent), 32))
 }
 
 internal fun MaterialButton.useUsbManagerTextColors() {
     backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
     setTextColor(context.uiColor(R.color.usb_accent))
-    rippleColor = android.content.res.ColorStateList.valueOf(context.uiColor(R.color.usb_accent_soft))
+    rippleColor = android.content.res.ColorStateList.valueOf(context.uiColor(R.color.control_ripple))
     elevation = 0f
 }
 
@@ -173,9 +192,15 @@ internal fun androidx.appcompat.app.AlertDialog.applyUsbDialogColors() {
     findViewById<TextView>(android.R.id.message)?.setTextColor(context.uiColor(R.color.text_body))
     listOf(android.content.DialogInterface.BUTTON_POSITIVE, android.content.DialogInterface.BUTTON_NEGATIVE,
         android.content.DialogInterface.BUTTON_NEUTRAL).forEach { which ->
-        getButton(which)?.setTextColor(context.uiColor(R.color.usb_accent))
+        getButton(which)?.apply {
+            setTextColor(context.uiColor(R.color.usb_accent))
+            if (this is MaterialButton) rippleColor = android.content.res.ColorStateList.valueOf(context.uiColor(R.color.control_ripple))
+            else useUsbManagerRipple()
+        }
     }
     listView?.apply {
+        selector = context.clickRipple(0)
+        setDrawSelectorOnTop(true)
         fun tintRows() {
             for (i in 0 until childCount) (getChildAt(i) as? android.widget.CheckedTextView)?.apply {
                 checkMarkTintList = context.controlColors()

@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.InputFilter
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.CheckBox
@@ -37,12 +38,21 @@ class UsbAuthenticationActivity : LocalizedActivity() {
     private var settingsCardView: MaterialCardView? = null
     private var transitionRow: LinearLayout? = null
     private var importDialog: androidx.appcompat.app.AlertDialog? = null
+    private var computerDialog: androidx.appcompat.app.AlertDialog? = null
+    private var computerEditorState: (() -> Bundle)? = null
     private var tearingDown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         render()
+        savedInstanceState?.getBundle("computer_editor")?.let { state ->
+            state.getString("id")?.let { id ->
+                val mode = UsbMode.entries[state.getInt("mode").coerceIn(0, UsbMode.entries.lastIndex)]
+                editComputer(KnownComputer(id, state.getString("name").orEmpty(), 0L, mode, state.getBoolean("adb")),
+                    state.getBoolean("after_pairing"), state)
+            }
+        }
     }
 
     private fun render(message: String? = null) {
@@ -227,7 +237,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
                     }
                 }
                 show()
-                window?.fitLandscapeDialog()
+                applyUsbDialogColors()
             }
     }
 
@@ -244,7 +254,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
                             else schemeErrorText(result.exceptionOrNull()))
                     }
                 }.start()
-            }.show().apply { window?.fitLandscapeDialog() }
+            }.showUsbDialog()
     }
 
     private fun settingsCard(): MaterialCardView = surfaceCard().apply {
@@ -310,14 +320,29 @@ class UsbAuthenticationActivity : LocalizedActivity() {
         }.apply { name = "usb-auth-detection"; start() }
     }
 
-    private fun editComputer(computer: KnownComputer, afterPairing: Boolean = false) {
+    private fun editComputer(computer: KnownComputer, afterPairing: Boolean = false, savedState: Bundle? = null) {
+        if (computerDialog != null) return
         val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(8), dp(24), dp(8)) }
         val name = EditText(this).apply {
+            useUsbManagerColors()
             hint = getString(R.string.auth_computer_name); setSingleLine(true)
             filters = arrayOf(InputFilter.LengthFilter(64)); setText(computer.label)
         }
         val mode = Spinner(this).apply {
-            adapter = ArrayAdapter(this@UsbAuthenticationActivity, android.R.layout.simple_spinner_dropdown_item, UsbMode.entries.map { getString(it.displayRes) })
+            backgroundTintList = controlColors()
+            setPopupBackgroundDrawable(roundedBackground(R.color.bg_card, 16, R.color.outline))
+            adapter = object : ArrayAdapter<String>(this@UsbAuthenticationActivity,
+                android.R.layout.simple_spinner_dropdown_item, UsbMode.entries.map { getString(it.displayRes) }) {
+                override fun getView(position: Int, recycled: View?, parent: ViewGroup): View =
+                    super.getView(position, recycled, parent).apply {
+                        (this as TextView).setTextColor(uiColor(R.color.text_primary))
+                    }
+                override fun getDropDownView(position: Int, recycled: View?, parent: ViewGroup): View =
+                    super.getDropDownView(position, recycled, parent).apply {
+                        (this as TextView).setTextColor(uiColor(R.color.text_primary))
+                        background = clickRipple(0)
+                    }
+            }
             setSelection((computer.mode ?: UsbMode.fromWire(ModuleSettings.defaultMode())).ordinal)
         }
         val adb = CheckBox(this).apply {
@@ -333,12 +358,41 @@ class UsbAuthenticationActivity : LocalizedActivity() {
                 else LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(adb)
         })
+        val scroll = ScrollView(this).apply { addView(form) }
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(if (afterPairing) R.string.auth_pair_customize else R.string.auth_edit)
-            .setView(ScrollView(this).apply { addView(form) })
+            .setView(scroll)
             .setNegativeButton(R.string.dialog_cancel, null).setPositiveButton(R.string.auth_save, null).create()
+        computerDialog = dialog
+        computerEditorState = {
+            Bundle().apply {
+                putString("id", computer.id)
+                putString("name", name.text.toString())
+                putInt("mode", mode.selectedItemPosition)
+                putBoolean("adb", adb.isChecked)
+                putBoolean("after_pairing", afterPairing)
+                putInt("selection_start", name.selectionStart)
+                putInt("selection_end", name.selectionEnd)
+                putBoolean("focused", name.hasFocus())
+                putCharSequence("error", name.error)
+                putInt("scroll", scroll.scrollY)
+            }
+        }
+        dialog.setOnDismissListener {
+            if (computerDialog === dialog) {
+                computerDialog = null
+                computerEditorState = null
+            }
+        }
         dialog.setOnShowListener {
-            dialog.window?.fitLandscapeDialog()
+            dialog.applyUsbDialogColors()
+            savedState?.let { state ->
+                name.error = state.getCharSequence("error")
+                if (state.getBoolean("focused")) name.requestFocus()
+                name.setSelection(state.getInt("selection_start", name.length()).coerceIn(0, name.length()),
+                    state.getInt("selection_end", name.length()).coerceIn(0, name.length()))
+                scroll.post { scroll.scrollTo(0, state.getInt("scroll")) }
+            }
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val label = name.text.toString().trim()
                 if (label.isEmpty() || label.any { char -> char.isISOControl() }) {
@@ -347,9 +401,12 @@ class UsbAuthenticationActivity : LocalizedActivity() {
                 val selectedMode = UsbMode.entries[mode.selectedItemPosition]
                 val selectedAdb = adb.isChecked
                 dialog.dismiss(); showBusy(getString(R.string.auth_saving))
+                val appContext = applicationContext
                 Thread {
-                    val ok = runCatching { RootAuthManager.update(this, computer.id, label, selectedMode, selectedAdb) }.getOrDefault(false)
-                    runOnUiThread { render(getString(if (ok) R.string.auth_saved else R.string.auth_save_failed)) }
+                    val ok = runCatching { RootAuthManager.update(appContext, computer.id, label, selectedMode, selectedAdb) }.getOrDefault(false)
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) render(getString(if (ok) R.string.auth_saved else R.string.auth_save_failed))
+                    }
                 }.start()
             }
         }
@@ -424,7 +481,7 @@ class UsbAuthenticationActivity : LocalizedActivity() {
                     val ok = runCatching { RootAuthManager.delete(this, computer.id) }.getOrDefault(false)
                     runOnUiThread { render(if (ok) null else getString(R.string.auth_save_failed)) }
                 }.start()
-            }.show().apply { window?.fitLandscapeDialog() }
+            }.showUsbDialog()
     }
 
     private fun showBusy(text: String) {
@@ -455,9 +512,17 @@ class UsbAuthenticationActivity : LocalizedActivity() {
         setOnClickListener { click() }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        if (computerDialog?.isShowing == true) {
+            computerEditorState?.invoke()?.let { outState.putBundle("computer_editor", it) }
+        }
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onDestroy() {
         tearingDown = true
         importDialog?.dismiss()
+        computerDialog?.dismiss()
         super.onDestroy()
     }
 }

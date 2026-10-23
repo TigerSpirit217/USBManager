@@ -31,10 +31,17 @@ internal object UiMotion {
     }
 }
 
-internal fun View.clickFeedback(radius: Int = 16) {
-    foreground = RippleDrawable(ColorStateList.valueOf(androidx.core.graphics.ColorUtils.setAlphaComponent(
-        context.uiColor(com.tiger.usbmanager.R.color.usb_accent), 32)), null,
+internal fun android.content.Context.clickRipple(radius: Int = 16) =
+    RippleDrawable(ColorStateList.valueOf(uiColor(com.tiger.usbmanager.R.color.control_ripple)), null,
         android.graphics.drawable.GradientDrawable().apply {
-            setColor(android.graphics.Color.WHITE); cornerRadius = context.dp(radius).toFloat()
+            setColor(android.graphics.Color.WHITE); cornerRadius = dp(radius).toFloat()
         })
+
+internal fun View.clickFeedback(radius: Int = 16) {
+    foreground = context.clickRipple(radius)
+}
+
+/** Keep native control shapes/hotspots, replacing only the cached ripple color. */
+internal fun View.useUsbManagerRipple() {
+    (background as? RippleDrawable)?.setColor(ColorStateList.valueOf(context.uiColor(com.tiger.usbmanager.R.color.control_ripple)))
 }

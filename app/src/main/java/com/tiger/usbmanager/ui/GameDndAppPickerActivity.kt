@@ -15,7 +15,8 @@ import android.widget.BaseAdapter
 import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.FrameLayout
-import androidx.appcompat.widget.PopupMenu
+import androidx.appcompat.widget.ListPopupWindow
+import android.widget.CheckedTextView
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ListView
@@ -54,6 +55,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
     private lateinit var save: MaterialButton
     private lateinit var searchPanel: MaterialCardView
     private lateinit var searchAction: ImageView
+    private var optionsMenu: ListPopupWindow? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,6 +80,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
         heading.addView(toolbarAction(R.drawable.ic_more, R.string.game_dnd_more) { showOptions(it) }, actionParams())
         root.addView(heading)
         search = EditText(this).apply {
+            useUsbManagerColors()
             setHint(R.string.game_dnd_search)
             setTextColor(uiColor(R.color.text_primary))
             setHintTextColor(uiColor(R.color.text_tertiary))
@@ -103,6 +106,8 @@ class GameDndAppPickerActivity : LocalizedActivity() {
         }
         list = ListView(this).apply {
             adapter = appAdapter
+            selector = context.clickRipple(0)
+            setDrawSelectorOnTop(true)
             divider = ColorDrawable(uiColor(R.color.outline))
             dividerHeight = dp(1)
             setOnItemClickListener { _, _, position, _ ->
@@ -222,15 +227,44 @@ class GameDndAppPickerActivity : LocalizedActivity() {
     }
 
     private fun showOptions(anchor: View) {
-        PopupMenu(this, anchor, Gravity.END).apply {
-            menu.add(R.string.game_dnd_show_system).apply { isCheckable = true; isChecked = showSystemApps }
-            setOnMenuItemClickListener { item ->
+        optionsMenu?.dismiss()
+        val menu = ListPopupWindow(this)
+        optionsMenu = menu
+        menu.apply {
+            anchorView = anchor
+            setDropDownGravity(Gravity.END)
+            width = dp(minOf(280, (resources.configuration.screenWidthDp - 36).coerceAtLeast(1)))
+            isModal = true
+            setBackgroundDrawable(roundedBackground(R.color.bg_card, 16, R.color.outline))
+            setListSelector(clickRipple(16))
+            setAdapter(object : BaseAdapter() {
+                override fun getCount() = 1
+                override fun getItem(position: Int) = getString(R.string.game_dnd_show_system)
+                override fun getItemId(position: Int) = 0L
+                override fun getView(position: Int, recycled: View?, parent: ViewGroup): View =
+                    ((recycled as? CheckedTextView) ?: CheckedTextView(this@GameDndAppPickerActivity)).apply {
+                        text = getItem(position)
+                        textSize = 14f
+                        gravity = Gravity.CENTER_VERTICAL
+                        minHeight = dp(48)
+                        setPadding(dp(16), dp(12), dp(16), dp(12))
+                        setTextColor(uiColor(R.color.text_primary))
+                        checkMarkDrawable = android.graphics.drawable.StateListDrawable().apply {
+                            addState(intArrayOf(android.R.attr.state_checked), getDrawable(android.R.drawable.checkbox_on_background))
+                            addState(intArrayOf(), getDrawable(android.R.drawable.checkbox_off_background))
+                        }
+                        checkMarkTintList = controlColors()
+                        isChecked = showSystemApps
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                    }
+            })
+            setOnItemClickListener { _, _, _, _ ->
                 showSystemApps = !showSystemApps
-                item.isChecked = showSystemApps
                 ModuleSettings.prefs().edit { putBoolean(ModuleSettings.KEY_GAME_DND_SHOW_SYSTEM_APPS, showSystemApps) }
                 filter()
-                true
+                dismiss()
             }
+            setOnDismissListener { if (optionsMenu === menu) optionsMenu = null }
             show()
         }
     }
@@ -326,6 +360,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
     }
 
     override fun onDestroy() {
+        optionsMenu?.dismiss()
         worker.shutdownNow()
         iconWorker.shutdownNow()
         iconCache.evictAll()

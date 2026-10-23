@@ -12,7 +12,6 @@ import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 import com.google.android.material.card.MaterialCardView
@@ -122,6 +121,7 @@ class GameDndSettingsActivity : LocalizedActivity() {
         textSize = 15f
         setTextColor(uiColor(R.color.text_primary))
         buttonTintList = context.controlColors()
+        useUsbManagerRipple()
         minHeight = dp(52)
     }
 
@@ -153,7 +153,7 @@ class GameDndSettingsActivity : LocalizedActivity() {
             }
         riskDialog?.apply {
             show()
-            window?.fitLandscapeDialog()
+            applyUsbDialogColors()
             findViewById<TextView>(android.R.id.message)?.setTextColor(uiColor(R.color.game_dnd_warning))
         }
     }
@@ -167,9 +167,7 @@ class GameDndSettingsActivity : LocalizedActivity() {
                 setPadding(dp(16), dp(14), dp(16), dp(14))
                 isClickable = true
                 isFocusable = true
-                val selectable = android.util.TypedValue()
-                theme.resolveAttribute(android.R.attr.selectableItemBackground, selectable, true)
-                foreground = getDrawable(selectable.resourceId)
+                clickFeedback(0)
                 setOnClickListener { startActivity(Intent(this@GameDndSettingsActivity, GameDndAppPickerActivity::class.java)) }
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL

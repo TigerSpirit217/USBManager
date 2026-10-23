@@ -61,7 +61,7 @@ open class UsbChooserActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (editsDefaultConfiguration) ModuleSettings.init(this)
         token = intent?.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0) ?: 0
-        setContentView(R.layout.activity_usb_chooser)
+        setContentView(chooserLayout())
         configureWindow()
         bindViews()
         applyIntentSelection()
@@ -110,14 +110,16 @@ open class UsbChooserActivity : ComponentActivity() {
         val mode = selectedMode
         val adbEnabled = adbSwitch.isChecked
         chooserCard.animate().cancel()
-        // Android selects layout-land for a landscape window. Rebind without closing
-        // the USB session or resetting the user's unconfirmed selection.
-        setContentView(R.layout.activity_usb_chooser)
+        // Use the same aspect-ratio policy as programmatic pages. Rebind without
+        // closing the USB session or resetting the user's unconfirmed selection.
+        setContentView(chooserLayout())
         bindViews()
         adbSwitch.isChecked = adbEnabled
         selectMode(mode, animate = false)
         configureWindow()
     }
+
+    private fun chooserLayout() = if (landscape()) R.layout.activity_usb_chooser_wide else R.layout.activity_usb_chooser
 
     private fun configureWindow() {
         window.setBackgroundDrawableResource(android.R.color.transparent)
@@ -153,6 +155,7 @@ open class UsbChooserActivity : ComponentActivity() {
         )
         definitions.forEach { definition ->
             val card = findViewById<MaterialCardView>(definition.viewId)
+            card.clickFeedback(if (landscape()) 16 else 18)
             val icon = card.findViewById<ImageView>(R.id.mode_icon)
             val indicator = card.findViewById<View>(R.id.mode_indicator)
             icon.setImageResource(definition.iconRes)
@@ -174,9 +177,12 @@ open class UsbChooserActivity : ComponentActivity() {
             findViewById<TextView>(R.id.chooser_footer_hint).setText(R.string.settings_default_usb_hint)
         }
 
-        findViewById<View>(R.id.adb_option).setOnClickListener {
-            adbSwitch.isChecked = !adbSwitch.isChecked
-            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        findViewById<View>(R.id.adb_option).apply {
+            clickFeedback(15)
+            setOnClickListener {
+                adbSwitch.isChecked = !adbSwitch.isChecked
+                it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            }
         }
         findViewById<MaterialButton>(R.id.cancel_button).apply {
             useUsbManagerTextColors()

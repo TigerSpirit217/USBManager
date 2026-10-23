@@ -27,6 +27,7 @@ internal class AppearancePage(
     private val themeChanged: () -> Unit,
     private val barChanged: () -> Unit,
     private val layoutChanged: () -> Unit,
+    private val editThemeColor: () -> Unit,
 ) {
     private var colorRow: LinearLayout? = null
     private var colorAnimation: ValueAnimator? = null
@@ -50,7 +51,7 @@ internal class AppearancePage(
             })
             addView(sectionLabel(getString(R.string.display_section)))
             addView(surfaceCard().apply {
-                val wide = landscape()
+                val wide = twoColumns()
                 val themeMode = themeModeRow()
                 val verticalLayout = switchRow(R.string.display_vertical_layout, DisplaySettings.verticalLayout()) {
                     DisplaySettings.setVerticalLayout(it); afterSwitchMotion(layoutChanged)
@@ -63,12 +64,12 @@ internal class AppearancePage(
                     positionHost = this
                     updatePositionRow()
                 }
-                val dynamicColors = switchRow(R.string.display_dynamic,
-                    DisplaySettings.dynamic() && DisplaySettings.dynamicAvailable(), DisplaySettings.dynamicAvailable()) {
+                val dynamicColors = if (DisplaySettings.dynamicAvailable()) switchRow(R.string.display_dynamic,
+                    DisplaySettings.dynamic()) {
                     DisplaySettings.setDynamic(it); animateColorRow(!it)
-                }
+                } else null
                 val themeColor = row(R.string.display_theme_color, DisplaySettings.hex(DisplaySettings.seed())) {
-                    ThemeColorDialog(activity) { DisplaySettings.setSeed(it); themeChanged() }.show()
+                    editThemeColor()
                 }
                 colorRow = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -81,7 +82,8 @@ internal class AppearancePage(
                     if (wide) {
                         addView(pairedRow(themeMode, verticalLayout))
                         addView(divider())
-                        addView(pairedRow(dynamicColors, floatingBar, topAligned = true))
+                        if (dynamicColors != null) addView(pairedRow(dynamicColors, floatingBar, topAligned = true))
+                        else addView(floatingBar)
                         addView(divider())
                         // Keep the left column's width when only its color control collapses.
                         addView(pairedRow(LinearLayout(activity).apply {
@@ -94,9 +96,12 @@ internal class AppearancePage(
                         addView(verticalLayout)
                         addView(divider())
                         addView(floatingBar)
-                        addView(divider())
-                        addView(dynamicColors)
+                        if (dynamicColors != null) {
+                            addView(divider())
+                            addView(dynamicColors)
+                        }
                         addView(colorRow)
+                        addView(positionOptions)
                     }
                 })
             })
@@ -223,7 +228,7 @@ internal class AppearancePage(
                         addState(intArrayOf(android.R.attr.state_checked), roundedBackground(R.color.usb_accent, 14))
                         addState(intArrayOf(), Color.TRANSPARENT.toDrawable())
                     }
-                    background = RippleDrawable(ColorStateList.valueOf(uiColor(R.color.accent_soft)), selector,
+                    background = RippleDrawable(ColorStateList.valueOf(uiColor(R.color.control_ripple)), selector,
                         roundedBackground(R.color.bg_card, 14))
                     isChecked = DisplaySettings.mode() == mode
                     setOnClickListener {

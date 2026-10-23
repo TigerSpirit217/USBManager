@@ -129,6 +129,11 @@ internal object DisplaySettings {
 
     fun apply(activity: Activity, unlockedOrientation: Int = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
         ModuleSettings.init(activity)
+        // The manifest theme is applied after attachBaseContext and can replace the
+        // wrapped context's colors. Apply our complete overlay to the Activity too,
+        // before its window, native widgets or dialog contexts resolve attributes.
+        activity.theme.applyStyle(if (isDark(activity)) R.style.ThemeOverlay_USBManager_Colors_Dark
+            else R.style.ThemeOverlay_USBManager_Colors_Light, true)
         applyOrientation(activity, unlockedOrientation)
         val dark = isDark(activity)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -148,6 +153,7 @@ internal object DisplaySettings {
         Mode.SYSTEM -> context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
     }
 
+    @android.annotation.SuppressLint("ResourceAsColor") // Resource IDs index the palette; values are resolved ARGB colors.
     fun colors(context: Context, previewSeed: Int? = null): Map<Int, Int> {
         val dynamic = previewSeed == null && dynamic() && dynamicAvailable()
         val source = previewSeed ?: if (dynamic) context.getColor(android.R.color.system_accent1_500) else seed()
@@ -161,7 +167,8 @@ internal object DisplaySettings {
                     if (key.dark) LegacyPalette.dark else LegacyPalette.light
                 else generated
             }
-            palette + if (key.dark) SemanticPalette.dark else SemanticPalette.light
+            palette + (if (key.dark) SemanticPalette.dark else SemanticPalette.light) +
+                (R.color.control_ripple to ColorUtils.setAlphaComponent(palette.getValue(R.color.usb_accent), 32))
         }
     }
     @android.annotation.SuppressLint("ResourceAsColor") // Resource IDs are map keys, never color values.
