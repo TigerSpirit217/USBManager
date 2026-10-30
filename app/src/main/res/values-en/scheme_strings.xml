@@ -1,14 +1,14 @@
 <resources>
     <string name="auth_scheme_title">Recognition scheme</string>
     <string name="auth_scheme_none">No scheme imported</string>
-    <string name="auth_scheme_required">Import a scheme package, then run its device support check.</string>
+    <string name="auth_scheme_required">Import a scheme, then tap “Detect this device”.</string>
     <string name="auth_scheme_import">Import scheme</string>
     <string name="auth_scheme_remove">Remove scheme</string>
     <string name="auth_scheme_importing">Validating and importing scheme…</string>
-    <string name="auth_scheme_confirm">%1$s\nVersion: %2$s\nAuthor: %3$s\n\nDetection, recognition and recovery scripts run as root. Only import schemes from trusted sources. Importing disables recognition; run detection again and enable it manually.</string>
+    <string name="auth_scheme_confirm">%1$s\nVersion: %2$s\nAuthor: %3$s\n\nSchemes run as root and can access device data and change system settings. Only import trusted schemes.\n\nAfter importing, run detection and enable recognition.</string>
     <string name="auth_scheme_imported">Scheme imported. Run the device check before enabling recognition.</string>
     <string name="auth_scheme_error">Scheme operation failed: %1$s</string>
-    <string name="auth_scheme_remove_confirm">Remove the current scheme and disable recognition? Computer records remain in the scheme\'s data directory and can be reused by importing the same scheme.</string>
+    <string name="auth_scheme_remove_confirm">Remove the current scheme and disable computer recognition?</string>
     <string name="auth_scheme_details">%1$s · %2$s\n%3$s</string>
     <string name="scheme_error_invalid_manifest">The scheme manifest is not a valid JSON object.</string>
     <string name="scheme_error_manifest_too_large">The scheme manifest exceeds the size limit.</string>

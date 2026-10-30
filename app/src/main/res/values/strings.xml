@@ -1,25 +1,25 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:locale="zh">
     <string name="app_name">USB 管理器</string>
-    <string name="xposed_description">基于 libxposed API 102 的 USB 管理模块，Hook system_server 实现连接电脑时弹窗选择 USB 模式与 ADB 开关。</string>
+    <string name="xposed_description">连接电脑时，选择 USB 模式与调试开关。</string>
 
     <!-- MainActivity intro -->
     <string name="intro_module_info">当前版本：%1$s</string>
     <string name="intro_start">开始使用</string>
     <string name="intro_section_features">功能说明</string>
-    <string name="intro_feature_1">• USB 插入时自动检测连接事件</string>
-    <string name="intro_feature_2">• 连接电脑将会弹出 USB 选择器对话框</string>
-    <string name="intro_feature_3">• 可选模式：仅充电 / 文件传输 (MTP) / 图片传输 (PTP) / USB 网络共享 (RNDIS) / MIDI</string>
-    <string name="intro_feature_4">• 可一键开启 USB 调试（ADB）</string>
-    <string name="intro_feature_5">• 手机作为 USB 主机连接 OTG 设备时交由系统原生识别，不弹窗</string>
-    <string name="intro_feature_6">• 拔出数据线后自动关闭 ADB（可关闭该行为）</string>
-    <string name="intro_feature_7">• 日志直接写入 LSPosed：请打开 LSPosed Manager查看日志</string>
+    <string name="intro_feature_1">• 自动检测 USB 连接</string>
+    <string name="intro_feature_2">• 连接电脑时选择 USB 模式</string>
+    <string name="intro_feature_3">• 支持充电、文件传输、图片传输、网络共享和 MIDI</string>
+    <string name="intro_feature_4">• 一键开关 USB 调试</string>
+    <string name="intro_feature_5">• 连接 OTG 设备时不弹窗</string>
+    <string name="intro_feature_6">• 可设置拔线自动关闭调试</string>
+    <string name="intro_feature_7">• 在 LSPosed 中查看模块日志</string>
     <string name="intro_section_usage">使用方法</string>
-    <string name="intro_usage_1">1. 在 LSPosed 中启用本模块，作用域勾选「system」，然后重启手机</string>
-    <string name="intro_usage_2">2. 查看顶部「模块已激活」自检确认 Hook 生效</string>
-    <string name="intro_usage_3">3. 用数据线连接电脑，将会弹出 USB 选择窗口</string>
-    <string name="intro_usage_4">4. 选择 USB 模式与 ADB 开关，点击「确定」生效</string>
-    <string name="intro_usage_5">5. 顶部状态卡片点击「重新检测」可再次检查模块激活状态</string>
-    <string name="intro_usage_6">6. 点击「获取日志方法」查看如何从 LSPosed 中查阅完整 Hook 日志</string>
+    <string name="intro_usage_1">1. 在 LSPosed 中启用模块，勾选 system 并重启</string>
+    <string name="intro_usage_2">2. 确认顶部显示“模块已激活”</string>
+    <string name="intro_usage_3">3. 用数据线连接电脑</string>
+    <string name="intro_usage_4">4. 选择 USB 模式与调试开关，点击“确定”</string>
+    <string name="intro_usage_5">5. 在状态页查看或切换当前模式</string>
+    <string name="intro_usage_6">6. 在主页调整默认配置</string>
 
     <!-- MainActivity config manager / activation -->
     <string name="settings_module_settings">模块设置</string>
@@ -31,16 +31,16 @@
     <string name="settings_adb_on">USB 调试开启</string>
     <string name="settings_adb_off">USB 调试关闭</string>
     <string name="settings_default_usb_subtitle">设置新连接默认使用的模式</string>
-    <string name="settings_default_usb_hint">此配置将在下次出现 USB 选择窗口时预先选中</string>
+    <string name="settings_default_usb_hint">下次连接时预选此配置</string>
     <string name="settings_disconnect_auto_off">拔线自动关闭 ADB</string>
     <string name="settings_chooser_while_locked">锁屏时也弹出选择窗口</string>
     <string name="auth_section_title">实验性功能</string>
     <string name="auth_entry_title">电脑识别与记忆</string>
     <string name="auth_entry_value">设置 ›</string>
     <string name="auth_page_title">电脑识别与记忆</string>
-    <string name="auth_usage">导入识别方案后，可验证并记住可信电脑。设备支持检测与 USB 接口实现由方案提供；请在 root 管理器中授予权限后检测。</string>
+    <string name="auth_usage">识别已配对电脑，自动应用保存的 USB 配置。\n\n1. 导入方案，授予 root 权限并检测设备。\n2. 检测通过后，启用电脑识别。\n3. 连接电脑，运行配套程序并在手机上配对。</string>
     <string name="auth_detect">检测此设备</string>
-    <string name="auth_detecting">正在进行本地 USB 能力检测…</string>
+    <string name="auth_detecting">正在检测设备…</string>
     <string name="auth_detect_root_required">请先授予 USB 管理器 root 权限，然后重新检测。</string>
     <string name="auth_detect_pass">检测通过，可以启用当前识别方案。</string>
     <string name="auth_detect_fail">当前方案未通过支持检测，可查看方案说明或导入其他方案重试。</string>
@@ -48,21 +48,21 @@
     <string name="auth_enable">启用电脑识别与记忆（实验性）</string>
     <string name="auth_applying_setting">正在应用设置…</string>
     <string name="auth_allow_pair">允许一台新电脑配对</string>
-    <string name="auth_pair_starting">正在配对，请保持数据线连接并运行电脑后端（接口就绪后等待最多 60 秒）…</string>
-    <string name="auth_pair_ready">配对窗口已打开。请保持数据线连接并确认电脑后端正在运行。</string>
+    <string name="auth_pair_starting">正在配对，请保持数据线连接并运行电脑配套程序…</string>
+    <string name="auth_pair_ready">请保持数据线连接，并运行电脑配套程序。</string>
     <string name="auth_pair_success">电脑配对成功，请确认名称和配置。</string>
     <string name="auth_pair_customize">配对成功：设置名称和配置</string>
-    <string name="auth_pair_failed">配对未完成，请检查电脑后端、数据线和 root 授权后重试。</string>
+    <string name="auth_pair_failed">配对失败，请检查电脑配套程序、数据线和 root 授权。</string>
     <string name="auth_saved_title">已保存的电脑</string>
     <string name="auth_saved_empty">尚未保存电脑。</string>
     <string name="auth_saved_details">最近识别：%1$s\nID：%2$s…\n%3$s</string>
     <string name="auth_delete">移除</string>
-    <string name="auth_delete_confirm">移除已保存的电脑“%1$s”？移除后需再次在手机上确认配对。</string>
+    <string name="auth_delete_confirm">移除已保存的电脑“%1$s”？</string>
     <string name="activate_checking">正在检测模块激活状态…</string>
     <string name="activate_check_error">检测异常，请重新检测；详细原因可在模块日志中查看。</string>
     <string name="version_unknown">未知</string>
-    <string name="activate_state_active">✅ 模块已激活 (Hook 正常)</string>
-    <string name="activate_state_inactive">❌ 模块未生效（LSPosed 未注入 system_server）</string>
+    <string name="activate_state_active">✅ 模块已激活</string>
+    <string name="activate_state_inactive">❌ 模块未生效</string>
     <string name="activate_state_unknown">⚠️ 模块状态不明</string>
     <string name="activate_hook_ok">✔</string>
     <string name="activate_hook_fail">✘</string>
@@ -70,10 +70,10 @@
     <string name="action_recheck">重新检测</string>
     <string name="action_activation_guide">激活教程</string>
     <string name="activation_guide_title">如何在 LSPosed 中激活本模块</string>
-    <string name="activation_guide_message">1. 打开 LSPosed 管理器（LSPosed Manager / Magisk 中的 LSPosed 入口）\n\n2. 进入「模块」页，找到「USB 管理器」，点进详情\n\n3. 打开右上角的启用开关\n\n4. 在「作用域」(Scope) 中，勾选「system」（system_server 专用 scope）\n\n5. 返回模块列表，选择「重启」(Reboot) 或在终端执行：\n   adb shell killall system_server\n\n重启完成后回到本应用点击「重新检测」，显示「模块已激活」即成功。\n\n如果仍不生效，请在 LSPosed Manager 中查看模块日志。</string>
+    <string name="activation_guide_message">1. 打开 LSPosed → 模块 → USB 管理器。\n2. 启用模块，作用域勾选 system。\n3. 重启手机，回到应用点击“重新检测”。</string>
     <string name="action_get_logs">获取日志方法</string>
     <string name="logs_how_to_title">获取 USBManager Hook 日志</string>
-    <string name="logs_how_to_message">1. 打开 LSPosed Manager\n2. 进入「日志」页面\n3. 点击上方搜索框，输入「USBManager」\n4. 即可看到完整的 Hook 日志，包括：\n     • 模块是否被注入 system_server\n     • 每次插入/拔出 USB 的事件\n     • 用户选择后 APPLY_USB_CONFIG 是否被收到\n     • 模式切换、ADB 开关是否成功执行\n\n【备选：命令行】\n  adb logcat -c &amp;&amp; adb logcat -s USBManager:V LSPosedFramework:V</string>
+    <string name="logs_how_to_message">打开 LSPosed → 日志，搜索 USBManager。\n\n也可运行：\nadb logcat -s USBManager:V LSPosedFramework:V</string>
     <string name="dialog_got_it">知道了</string>
     <string name="dialog_cancel">取消</string>
     <string name="action_back">返回</string>
@@ -83,7 +83,7 @@
     <string name="chooser_connection_subtitle">已检测到电脑连接</string>
     <string name="chooser_mode_section">选择本次连接的用途</string>
     <string name="chooser_mode_charging">仅充电</string>
-    <string name="chooser_mode_charging_description">保持数据连接关闭，仅为设备充电</string>
+    <string name="chooser_mode_charging_description">仅为设备充电</string>
     <string name="chooser_mode_mtp">文件传输 (MTP)</string>
     <string name="chooser_mode_mtp_description">在电脑与手机之间浏览和传输文件</string>
     <string name="chooser_mode_ptp">图片传输 (PTP)</string>
@@ -93,14 +93,14 @@
     <string name="chooser_mode_midi">MIDI</string>
     <string name="chooser_mode_midi_description">连接 MIDI 乐器或音乐软件</string>
     <string name="chooser_adb">开启 USB 调试</string>
-    <string name="chooser_adb_description">允许此连接使用 Android 调试桥</string>
+    <string name="chooser_adb_description">允许已授权的电脑调试设备并访问数据</string>
     <string name="chooser_one_time_hint">本次选择仅应用于当前 USB 连接</string>
     <string name="chooser_cancel">取消</string>
     <string name="chooser_confirm">确定</string>
 
     <!-- ModuleActivationCheck -->
-    <string name="check_inactive_reason">模块未被 LSPosed 激活。请在 LSPosed 管理器中：点击本模块 → 打开开关 → 作用域勾选「system（系统框架）」 → 重启手机。</string>
-    <string name="check_unknown_note">LSPosed 已启用本模块，但 system_server 尚未加载模块（系统属性未设置）。请重启手机后再次检测。</string>
+    <string name="check_inactive_reason">请在 LSPosed 中启用模块，勾选 system 并重启手机。</string>
+    <string name="check_unknown_note">请重启手机后重新检测。</string>
 
     <!-- Notification (used inside system_server) -->
     <string name="notification_channel_name">USB 选择器</string>
@@ -112,7 +112,7 @@
     <string name="auth_computer_name">电脑名称</string>
     <string name="auth_name_required">请输入有效的电脑名称</string>
     <string name="auth_saving">正在保存…</string>
-    <string name="auth_saved">已保存，下次识别该电脑时应用新配置。</string>
+    <string name="auth_saved">已保存。</string>
     <string name="auth_save_failed">保存失败，请检查 root 授权后重试。</string>
     <string name="auth_config_missing">未设置配置</string>
     <string name="auth_adb_label">ADB</string>
@@ -127,7 +127,7 @@
     <!-- Main-screen compatibility warning; module-specific text lives in the JSON asset. -->
     <string name="compatibility_warning_title">模块兼容性提醒</string>
     <string name="compatibility_warning_count">检测到 %1$d 个可能冲突的应用</string>
-    <string name="compatibility_warning_intro">检测到以下可能影响 USBManager 的已安装应用。如已启用相关模块或功能，建议按下列方法关闭；已关闭的可以忽略本次提醒。</string>
+    <string name="compatibility_warning_intro">以下应用可能与 USBManager 冲突。请关闭列出的相关功能；已关闭可忽略。</string>
     <string name="compatibility_feature">相关功能：%1$s</string>
     <string name="compatibility_reason">原因：%1$s</string>
     <string name="compatibility_disable">禁用方法：%1$s</string>

@@ -1,25 +1,25 @@
 <resources>
     <string name="app_name">USB Manager</string>
-    <string name="xposed_description">A libxposed API 102 USB management module that hooks system_server to show a USB mode and ADB chooser when connecting to a computer.</string>
+    <string name="xposed_description">Choose USB mode and debugging settings when connecting to a computer.</string>
 
     <!-- MainActivity intro -->
     <string name="intro_module_info">Version: %1$s</string>
     <string name="intro_start">Get Started</string>
     <string name="intro_section_features">Features</string>
-    <string name="intro_feature_1">• Detects USB connection events automatically</string>
+    <string name="intro_feature_1">• Detect USB connections automatically</string>
     <string name="intro_feature_2">• Shows a USB chooser when connected to a computer</string>
-    <string name="intro_feature_3">• Available modes: Charge only / File transfer (MTP) / Photo transfer (PTP) / USB tethering (RNDIS) / MIDI</string>
-    <string name="intro_feature_4">• Enables USB debugging (ADB) with a single tap</string>
-    <string name="intro_feature_5">• Lets Android handle OTG devices natively when the phone acts as USB host, without showing a chooser</string>
-    <string name="intro_feature_6">• Turns ADB off after unplug (can be disabled)</string>
-    <string name="intro_feature_7">• Writes logs directly to LSPosed; open LSPosed Manager to view them</string>
+    <string name="intro_feature_3">• Charge, transfer files or photos, share internet, or use MIDI</string>
+    <string name="intro_feature_4">• Toggle USB debugging</string>
+    <string name="intro_feature_5">• No chooser for OTG devices</string>
+    <string name="intro_feature_6">• Optionally turn debugging off on unplug</string>
+    <string name="intro_feature_7">• View module logs in LSPosed</string>
     <string name="intro_section_usage">Usage</string>
-    <string name="intro_usage_1">1. Enable this module in LSPosed, tick \"system\" in scope, then reboot the phone</string>
-    <string name="intro_usage_2">2. Check the \"Module active\" status at the top to confirm the hook is working</string>
-    <string name="intro_usage_3">3. Connect to a computer with a USB cable; the USB chooser will appear</string>
-    <string name="intro_usage_4">4. Choose the USB mode and ADB toggle, then tap \"OK\" to apply</string>
-    <string name="intro_usage_5">5. Tap \"Re-check\" on the top status card to re-check module activation</string>
-    <string name="intro_usage_6">6. Tap \"How to get logs\" to learn how to view the complete hook log in LSPosed</string>
+    <string name="intro_usage_1">1. Enable the module for system in LSPosed and restart</string>
+    <string name="intro_usage_2">2. Check that “Module active” appears at the top</string>
+    <string name="intro_usage_3">3. Connect a computer with a USB cable</string>
+    <string name="intro_usage_4">4. Choose USB mode and debugging, then tap OK</string>
+    <string name="intro_usage_5">5. View or change the current mode on Status</string>
+    <string name="intro_usage_6">6. Adjust defaults on Home</string>
 
     <!-- MainActivity config manager / activation -->
     <string name="settings_module_settings">Module settings</string>
@@ -31,16 +31,16 @@
     <string name="settings_adb_on">USB debugging on</string>
     <string name="settings_adb_off">USB debugging off</string>
     <string name="settings_default_usb_subtitle">Choose the defaults for new connections</string>
-    <string name="settings_default_usb_hint">These options will be preselected the next time the USB chooser appears</string>
+    <string name="settings_default_usb_hint">Preselect these options on the next connection</string>
     <string name="settings_disconnect_auto_off">Turn ADB off on unplug</string>
     <string name="settings_chooser_while_locked">Show chooser while locked</string>
     <string name="auth_section_title">Experimental</string>
     <string name="auth_entry_title">Computer identification</string>
     <string name="auth_entry_value">Settings ›</string>
     <string name="auth_page_title">Computer identification</string>
-    <string name="auth_usage">Import a recognition scheme to verify and remember trusted computers. The scheme provides device detection and the USB interface. Grant root access before running detection.</string>
+    <string name="auth_usage">Recognize paired computers and apply their saved USB settings.\n\n1. Import a scheme, grant root access, and detect the device.\n2. Enable computer recognition after detection passes.\n3. Connect the computer, run its companion app, and pair on the phone.</string>
     <string name="auth_detect">Detect this device</string>
-    <string name="auth_detecting">Running the local USB capability test…</string>
+    <string name="auth_detecting">Checking device support…</string>
     <string name="auth_detect_root_required">Grant USB Manager root access in your root manager, then run detection again.</string>
     <string name="auth_detect_pass">Detection passed. You can enable the current scheme.</string>
     <string name="auth_detect_fail">The current scheme failed its device check. Review its instructions or try another scheme.</string>
@@ -48,21 +48,21 @@
     <string name="auth_enable">Enable computer identification (experimental)</string>
     <string name="auth_applying_setting">Applying setting…</string>
     <string name="auth_allow_pair">Allow one new computer</string>
-    <string name="auth_pair_starting">Pairing: keep the cable connected and the Windows companion running (up to 60 seconds after the interface is ready)…</string>
-    <string name="auth_pair_ready">Pairing is ready. Keep USB connected and start the Windows backend.</string>
+    <string name="auth_pair_starting">Pairing… Keep the cable connected and the computer companion app running.</string>
+    <string name="auth_pair_ready">Keep the cable connected and run the computer companion app.</string>
     <string name="auth_pair_success">Computer paired. Confirm its name and configuration.</string>
     <string name="auth_pair_customize">Paired: name and configuration</string>
-    <string name="auth_pair_failed">Pairing did not complete. Check the Windows companion, cable and root access, then retry.</string>
+    <string name="auth_pair_failed">Pairing failed. Check the computer companion app, cable, and root access.</string>
     <string name="auth_saved_title">Saved computers</string>
     <string name="auth_saved_empty">No computers saved yet.</string>
     <string name="auth_saved_details">Last seen: %1$s\nID: %2$s…\n%3$s</string>
     <string name="auth_delete">Remove</string>
-    <string name="auth_delete_confirm">Remove “%1$s”? Pairing will require phone confirmation again.</string>
+    <string name="auth_delete_confirm">Remove the saved computer “%1$s”?</string>
     <string name="activate_checking">Checking module activation…</string>
     <string name="activate_check_error">Check failed. Try again; details are available in the module log.</string>
     <string name="version_unknown">Unknown</string>
-    <string name="activate_state_active">✅ Module active (hooks OK)</string>
-    <string name="activate_state_inactive">❌ Module inactive (LSPosed did not inject system_server)</string>
+    <string name="activate_state_active">✅ Module active</string>
+    <string name="activate_state_inactive">❌ Module inactive</string>
     <string name="activate_state_unknown">⚠️ Module status unknown</string>
     <string name="activate_hook_ok">✔</string>
     <string name="activate_hook_fail">✘</string>
@@ -70,10 +70,10 @@
     <string name="action_recheck">Re-check</string>
     <string name="action_activation_guide">Activation guide</string>
     <string name="activation_guide_title">How to activate this module in LSPosed</string>
-    <string name="activation_guide_message">1. Open LSPosed Manager (or its entry in Magisk)\n\n2. Go to the Modules page, find \"USB Manager\", and open its details\n\n3. Turn on the enable switch in the top-right corner\n\n4. Under Scope, tick \"system\" (the system_server-specific scope)\n\n5. Go back and choose Reboot, or run:\n   adb shell killall system_server\n\nAfter rebooting, return here and tap \"Re-check\" — \"Module active\" means success.\n\nIf it still doesn\'t work, check the module log in LSPosed Manager.</string>
+    <string name="activation_guide_message">1. Open LSPosed → Modules → USB Manager.\n2. Enable the module and select system in Scope.\n3. Restart the phone, then tap Re-check in this app.</string>
     <string name="action_get_logs">How to get logs</string>
     <string name="logs_how_to_title">Getting USBManager hook logs</string>
-    <string name="logs_how_to_message">1. Open LSPosed Manager\n2. Go to the Logs page\n3. Tap the search box at the top and enter \"USBManager\"\n4. You can now view the complete hook log, including:\n     • Whether the module was injected into system_server\n     • Each USB plug/unplug event\n     • Whether APPLY_USB_CONFIG was received after your choice\n     • Whether the mode switch and ADB toggle succeeded\n\n[Alternative: command line]\n  adb logcat -c &amp;&amp; adb logcat -s USBManager:V LSPosedFramework:V</string>
+    <string name="logs_how_to_message">Open LSPosed → Logs and search for USBManager.\n\nOr run:\nadb logcat -s USBManager:V LSPosedFramework:V</string>
     <string name="dialog_got_it">Got it</string>
     <string name="dialog_cancel">Cancel</string>
     <string name="action_back">Back</string>
@@ -93,14 +93,14 @@
     <string name="chooser_mode_midi">MIDI</string>
     <string name="chooser_mode_midi_description">Connect MIDI instruments or music software</string>
     <string name="chooser_adb">Enable USB debugging</string>
-    <string name="chooser_adb_description">Allow Android Debug Bridge for this connection</string>
+    <string name="chooser_adb_description">Allow authorized computers to debug the device and access data</string>
     <string name="chooser_one_time_hint">This choice applies only to the current USB connection</string>
     <string name="chooser_cancel">Cancel</string>
     <string name="chooser_confirm">OK</string>
 
     <!-- ModuleActivationCheck -->
-    <string name="check_inactive_reason">The module is not activated in LSPosed. In LSPosed Manager: tap this module → enable it → tick \"system (system framework)\" in scope → reboot.</string>
-    <string name="check_unknown_note">LSPosed has enabled this module, but system_server hasn\'t loaded it yet (system property unset). Reboot and re-check.</string>
+    <string name="check_inactive_reason">Enable the module for system in LSPosed and restart the phone.</string>
+    <string name="check_unknown_note">Restart the phone and check again.</string>
 
     <!-- Notification (used inside system_server) -->
     <string name="notification_channel_name">USB chooser</string>
@@ -112,7 +112,7 @@
     <string name="auth_computer_name">Computer name</string>
     <string name="auth_name_required">Enter a valid computer name</string>
     <string name="auth_saving">Saving…</string>
-    <string name="auth_saved">Saved. The new configuration applies on the next recognition.</string>
+    <string name="auth_saved">Saved.</string>
     <string name="auth_save_failed">Could not save. Check root access and try again.</string>
     <string name="auth_config_missing">Configuration not set</string>
     <string name="auth_adb_label">ADB</string>
@@ -126,7 +126,7 @@
     <!-- Main-screen compatibility warning; module-specific text lives in the JSON asset. -->
     <string name="compatibility_warning_title">Module compatibility notice</string>
     <string name="compatibility_warning_count">Potentially conflicting apps: %1$d</string>
-    <string name="compatibility_warning_intro">These installed apps may affect USBManager. If the listed modules or features are enabled, turn them off as described below. You can ignore this notice if they are already disabled.</string>
+    <string name="compatibility_warning_intro">These apps may conflict with USBManager. Turn off the listed features; ignore this notice if they are already off.</string>
     <string name="compatibility_feature">Feature: %1$s</string>
     <string name="compatibility_reason">Reason: %1$s</string>
     <string name="compatibility_disable">How to disable: %1$s</string>
