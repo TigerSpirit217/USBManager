@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="adb_auth_section">Debugging authorizations</string>
+    <string name="adb_auth_title">USB debugging authorizations</string>
+    <string name="adb_auth_entry_hint">View saved computer keys and revoke debugging access for individual computers.</string>
+    <string name="adb_auth_manage">Manage authorized computers</string>
+    <string name="adb_auth_description">Manage the system’s “Always allow” ADB debugging keys without an additional root grant. Temporary grants and system keys are excluded. USB and wireless debugging may share keys; keys alone cannot identify the connection type. Revoking a key affects debugging connections that use it. Computer names come from the keys; check the fingerprint too.</string>
+    <string name="adb_auth_refresh">Refresh list</string>
+    <string name="adb_auth_loading">Loading debugging authorizations…</string>
+    <string name="adb_auth_revoking">Revoking and verifying authorization…</string>
+    <string name="adb_auth_count">Saved computers (%1$d)</string>
+    <string name="adb_auth_empty">No saved debugging authorizations. Connect a computer and select “Always allow” in the system authorization dialog to manage it here.</string>
+    <string name="adb_auth_unknown_host">Unnamed computer</string>
+    <string name="adb_auth_fingerprint">Key fingerprint\n%1$s</string>
+    <string name="adb_auth_revoke">Revoke authorization</string>
+    <string name="adb_auth_revoke_host">Revoke debugging access for %1$s</string>
+    <string name="adb_auth_confirm">Revoke debugging access for “%1$s”?\n\nKey fingerprint:\n%2$s\n\nThis may disconnect this computer’s current USB or wireless debugging session. Debugging again requires authorization. Other keys are unaffected.</string>
+    <string name="adb_auth_revoked">Verified: debugging authorization for this key was revoked.</string>
+    <string name="adb_auth_unsupported">This system does not expose a compatible API for individual authorizations. Android 11 or later with a compatible ROM is required. Enable the module and restart the device.</string>
+    <string name="adb_auth_load_failed">Could not read debugging authorizations. Make sure the module is enabled and the device has been restarted, then refresh.</string>
+    <string name="adb_auth_revoke_failed">Could not confirm revocation. Disconnect debugging sessions for this computer, enable USB debugging once if needed, then refresh and retry.</string>
+    <string name="adb_auth_limit">Too many saved keys to safely retrieve a complete list. Revocation is unavailable.</string>
+    <string name="adb_auth_disconnect_required">This computer still has an active debugging connection. Disconnect its USB and wireless debugging sessions, then refresh and revoke authorization.</string>
+</resources>

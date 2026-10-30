@@ -143,6 +143,8 @@ internal class SystemServerReceiver(
 
     @android.annotation.SuppressLint("UnspecifiedRegisterReceiverFlag") // Flags are passed on API 33+ below.
     fun register(context: Context) {
+        runCatching { AdbAuthorizationReceiver(env).register(context) }
+            .onFailure { env.warn("ADB authorization receiver unavailable", it) }
         // 1) Internal bridge receiver.
         //    NOTE: NO permission arg on registerReceiver; trust is established
         //    via EXTRA_BRIDGE_TOKEN inside each intent (see class KDoc).

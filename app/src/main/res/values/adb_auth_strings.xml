@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="adb_auth_section">调试授权</string>
+    <string name="adb_auth_title">USB 调试授权</string>
+    <string name="adb_auth_entry_hint">查看已保存的计算机密钥，单独撤销某台计算机的调试授权。</string>
+    <string name="adb_auth_manage">管理授权计算机</string>
+    <string name="adb_auth_description">管理系统中“始终允许”的 ADB 调试密钥，无需额外授予 root 权限。临时允许和系统预置密钥不在列表中。USB 与无线调试可能共用密钥，无法仅凭密钥区分连接方式；撤销会同时影响使用该密钥的调试连接。计算机名称由密钥提供，请结合指纹核对。</string>
+    <string name="adb_auth_refresh">刷新列表</string>
+    <string name="adb_auth_loading">正在读取调试授权…</string>
+    <string name="adb_auth_revoking">正在撤销并核对授权…</string>
+    <string name="adb_auth_count">已保存的计算机（%1$d）</string>
+    <string name="adb_auth_empty">没有已保存的调试授权。连接计算机并在系统授权窗口勾选“始终允许”后，可在此管理。</string>
+    <string name="adb_auth_unknown_host">未命名计算机</string>
+    <string name="adb_auth_fingerprint">密钥指纹\n%1$s</string>
+    <string name="adb_auth_revoke">撤销授权</string>
+    <string name="adb_auth_revoke_host">撤销 %1$s 的调试授权</string>
+    <string name="adb_auth_confirm">撤销“%1$s”的调试授权？\n\n密钥指纹：\n%2$s\n\n这可能断开该计算机当前的 USB 或无线调试连接。再次调试需要重新授权，其他密钥不受影响。</string>
+    <string name="adb_auth_revoked">已核对：该密钥的调试授权已撤销。</string>
+    <string name="adb_auth_unsupported">当前系统未提供兼容的逐条授权管理接口。此功能需要 Android 11 或更高版本及兼容 ROM，并需启用模块后重启。</string>
+    <string name="adb_auth_load_failed">无法读取调试授权。请确认模块已启用且设备已重启，然后刷新重试。</string>
+    <string name="adb_auth_revoke_failed">未能确认授权已撤销。请断开该计算机的调试连接，必要时先开启一次 USB 调试，再刷新列表并重试。</string>
+    <string name="adb_auth_limit">保存的密钥过多，无法一次安全读取完整列表，暂不提供撤销操作。</string>
+    <string name="adb_auth_disconnect_required">该计算机仍有活动调试连接。请先断开它的 USB 与无线调试连接，再刷新列表并撤销授权。</string>
+</resources>

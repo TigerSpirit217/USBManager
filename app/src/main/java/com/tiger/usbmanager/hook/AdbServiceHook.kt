@@ -14,6 +14,10 @@ internal object AdbServiceHook {
 
     @Volatile private var adbService: Any? = null
 
+    fun debuggingManager(): Any? = adbService?.let { service ->
+        service.javaClass.fieldOrNull("mDebuggingManager")?.get(service)
+    }
+
     fun install(env: HookEnv) {
         hookAdbService(env)
     }

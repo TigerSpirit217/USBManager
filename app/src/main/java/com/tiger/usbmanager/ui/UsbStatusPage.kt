@@ -137,6 +137,29 @@ internal class UsbStatusPage(private val activity: Activity) {
                 })
             })
             lastConnection = snapshot.connected
+            addView(sectionLabel(getString(R.string.adb_auth_section)))
+            addView(surfaceCard().apply {
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(18), dp(16), dp(18), dp(12))
+                    addView(TextView(activity).apply {
+                        setText(R.string.adb_auth_title); textSize = 17f
+                        setTextColor(uiColor(R.color.text_primary))
+                    })
+                    addView(TextView(activity).apply {
+                        setText(R.string.adb_auth_entry_hint); textSize = 13f
+                        setTextColor(uiColor(R.color.text_secondary))
+                        setPadding(0, dp(8), 0, dp(10))
+                    })
+                    addView(MaterialButton(activity).apply {
+                        setText(R.string.adb_auth_manage); isAllCaps = false
+                        useUsbManagerOutlinedColors()
+                        setOnClickListener {
+                            startActivity(android.content.Intent(activity, AdbAuthorizationsActivity::class.java))
+                        }
+                    }, verticalMargins(bottom = 0))
+                })
+            })
             render(snapshot)
         }
     }

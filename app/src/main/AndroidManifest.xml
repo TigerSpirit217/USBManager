@@ -6,6 +6,10 @@
         <provider android:authorities="io.github.libxposed.service" />
     </queries>
 
+    <permission android:name="com.tiger.usbmanager.permission.MANAGE_ADB_AUTHORIZATIONS"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.tiger.usbmanager.permission.MANAGE_ADB_AUTHORIZATIONS" />
+
     <application
         android:name=".UsbManagerApp"
         android:allowBackup="true"
@@ -34,6 +38,7 @@
             android:exported="false" />
 
         <activity android:name=".ui.GameDndSettingsActivity" android:exported="false" />
+        <activity android:name=".ui.AdbAuthorizationsActivity" android:exported="false" />
         <activity android:name=".ui.GameDndAppPickerActivity" android:exported="false" />
 
         <activity
