@@ -16,13 +16,13 @@ import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.FrameLayout
 import androidx.appcompat.widget.ListPopupWindow
-import android.widget.CheckedTextView
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.content.edit
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.button.MaterialButton
@@ -241,22 +241,48 @@ class GameDndAppPickerActivity : LocalizedActivity() {
                 override fun getCount() = 1
                 override fun getItem(position: Int) = getString(R.string.game_dnd_show_system)
                 override fun getItemId(position: Int) = 0L
-                override fun getView(position: Int, recycled: View?, parent: ViewGroup): View =
-                    ((recycled as? CheckedTextView) ?: CheckedTextView(this@GameDndAppPickerActivity)).apply {
-                        text = getItem(position)
-                        textSize = 14f
+                override fun getView(position: Int, recycled: View?, parent: ViewGroup): View {
+                    val row = recycled ?: LinearLayout(this@GameDndAppPickerActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL
                         gravity = Gravity.CENTER_VERTICAL
-                        minHeight = dp(48)
-                        setPadding(dp(16), dp(12), dp(16), dp(12))
-                        setTextColor(uiColor(R.color.text_primary))
-                        checkMarkDrawable = android.graphics.drawable.StateListDrawable().apply {
-                            addState(intArrayOf(android.R.attr.state_checked), getDrawable(android.R.drawable.checkbox_on_background))
-                            addState(intArrayOf(), getDrawable(android.R.drawable.checkbox_off_background))
+                        minimumHeight = dp(48)
+                        setPadding(dp(16), dp(8), dp(16), dp(8))
+                        val label = TextView(context).apply {
+                            textSize = 14f
+                            setTextColor(uiColor(R.color.text_primary))
+                            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                         }
-                        checkMarkTintList = controlColors()
-                        isChecked = showSystemApps
+                        addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        val check = CheckBox(context).apply {
+                            useUsbManagerColors()
+                            background = null
+                            minWidth = 0; minHeight = 0
+                            setPadding(0, 0, 0, 0)
+                            isClickable = false
+                            isFocusable = false
+                            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                        }
+                        addView(check, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12) })
+                        tag = SystemAppsOptionRow(label, check)
                         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                        accessibilityDelegate = object : View.AccessibilityDelegate() {
+                            override fun onInitializeAccessibilityNodeInfo(host: View, info: android.view.accessibility.AccessibilityNodeInfo) {
+                                super.onInitializeAccessibilityNodeInfo(host, info)
+                                info.className = CheckBox::class.java.name
+                                info.text = label.text
+                                info.isCheckable = true
+                                AccessibilityNodeInfoCompat.wrap(info).setChecked(
+                                    if (check.isChecked) AccessibilityNodeInfoCompat.CHECKED_STATE_TRUE
+                                    else AccessibilityNodeInfoCompat.CHECKED_STATE_FALSE)
+                            }
+                        }
                     }
+                    val views = row.tag as SystemAppsOptionRow
+                    views.label.text = getItem(position)
+                    views.check.isChecked = showSystemApps
+                    return row
+                }
             })
             setOnItemClickListener { _, _, _, _ ->
                 showSystemApps = !showSystemApps
@@ -268,6 +294,8 @@ class GameDndAppPickerActivity : LocalizedActivity() {
             show()
         }
     }
+
+    private data class SystemAppsOptionRow(val label: TextView, val check: CheckBox)
 
     private data class AppRow(val icon: ImageView, val label: TextView, val packageName: TextView, val check: CheckBox)
 
