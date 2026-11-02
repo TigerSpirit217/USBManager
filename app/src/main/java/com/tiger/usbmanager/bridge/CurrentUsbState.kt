@@ -1,13 +1,11 @@
 package com.tiger.usbmanager.bridge
 
 import android.content.BroadcastReceiver
-import android.app.BroadcastOptions
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.database.ContentObserver
 import android.os.Handler
-import android.os.Build
 import android.os.Looper
 import android.provider.Settings
 import androidx.core.content.ContextCompat
@@ -25,6 +23,8 @@ class CurrentUsbState(private val context: Context, private val changed: (Curren
     private var receiverRegistered = false
     private var adbObserverRegistered = false
     private var queryGeneration = 0
+    private var querying = false
+    private var queryTimeout: Runnable? = null
     private var snapshot = CurrentUsbSnapshot(null, null, null)
     private val poll = object : Runnable {
         override fun run() {
@@ -68,10 +68,14 @@ class CurrentUsbState(private val context: Context, private val changed: (Curren
         adbObserverRegistered = false
         observing = false
         queryGeneration++
+        querying = false
+        queryTimeout?.let(handler::removeCallbacks)
+        queryTimeout = null
         handler.removeCallbacks(poll)
     }
 
     fun refresh() {
+        if (!observing || querying) return
         // Refresh the sticky state as well when returning from a dialog/settings.
         val current = runCatching { context.registerReceiver(null, IntentFilter(ACTION_USB_STATE)) }.getOrNull() ?: usbIntent
         usbIntent = current
@@ -86,13 +90,15 @@ class CurrentUsbState(private val context: Context, private val changed: (Curren
             .getOrNull()
         val fallback = CurrentUsbSnapshot(current?.getBooleanExtra("connected", false), mode, adb)
         val request = ++queryGeneration
+        querying = true
+        queryTimeout = Runnable { finishQuery(request, fallback) }.also { handler.postDelayed(it, 2_000L) }
         // Query the framework mask before publishing; avoid briefly flashing an advertised MTP flag.
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (request != queryGeneration) return
                 val functions = if (resultCode == ModuleConstants.RESULT_STATUS_AVAILABLE)
                     getResultExtras(false)?.getString(ModuleConstants.EXTRA_USB_FUNCTIONS) else null
-                publish(if (functions != null) fallback.copy(mode = UsbStatusMode.fromFunctions(functions)) else fallback)
+                finishQuery(request, if (functions != null) fallback.copy(mode = UsbStatusMode.fromFunctions(functions)) else fallback)
             }
         }
         runCatching {
@@ -100,7 +106,16 @@ class CurrentUsbState(private val context: Context, private val changed: (Curren
                 addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                 putExtra(ModuleConstants.EXTRA_BRIDGE_TOKEN, ModuleConstants.BRIDGE_TOKEN)
             }, receiver)
-        }.onFailure { if (request == queryGeneration) publish(fallback) }
+        }.onFailure { finishQuery(request, fallback) }
+    }
+
+    private fun finishQuery(request: Int, value: CurrentUsbSnapshot) {
+        if (request != queryGeneration) return
+        queryGeneration++
+        querying = false
+        queryTimeout?.let(handler::removeCallbacks)
+        queryTimeout = null
+        publish(value)
     }
 
     private fun publish(current: CurrentUsbSnapshot) {
@@ -129,12 +144,8 @@ class CurrentUsbState(private val context: Context, private val changed: (Curren
         }
 
         private fun sendOrdered(context: Context, intent: Intent, receiver: BroadcastReceiver) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val options = BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
-                context.sendOrderedBroadcast(intent, null, options, receiver, Handler(Looper.getMainLooper()), 0, null, null)
-            } else {
-                context.sendOrderedBroadcast(intent, null, receiver, Handler(Looper.getMainLooper()), 0, null, null)
-            }
+            intent.setPackage(ModuleConstants.SYSTEM_SERVER_PACKAGE)
+            context.sendOrderedBroadcast(intent, null, receiver, Handler(Looper.getMainLooper()), 0, null, null)
         }
     }
 }

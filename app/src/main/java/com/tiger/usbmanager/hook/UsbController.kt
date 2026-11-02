@@ -23,6 +23,7 @@ import java.util.Locale
 internal class UsbController(private val env: HookEnv) {
 
     @Volatile private var usbDeviceManager: Any? = null
+    fun hasUsbDeviceManager(): Boolean = usbDeviceManager != null
 
     /** UsbManager function bitmask constants, resolved reflectively. */
     private val functionBits: Map<UsbMode, Long> by lazy { resolveFunctionBits() }
@@ -112,7 +113,7 @@ internal class UsbController(private val env: HookEnv) {
             if (ctx != null) {
                 runCatching {
                     Settings.Global.putInt(ctx.contentResolver, Settings.Global.ADB_ENABLED, if (enabled) 1 else 0)
-                }.isSuccess
+                }.getOrDefault(false)
             } else false
         }
 

@@ -12,6 +12,10 @@ object ModuleConstants {
 
     /** system_server package name (scope target). */
     const val SYSTEM_SERVER_PACKAGE = "android"
+    const val CONTROL_PERMISSION = "$MODULE_PACKAGE.permission.CONTROL_USB"
+    const val ACTION_QUERY_HEALTH = "$MODULE_PACKAGE.action.QUERY_HEALTH"
+    const val RESULT_HEALTH_AVAILABLE = 4
+    const val EXTRA_REQUEST_ID = "request_id"
 
     /** Chooser activity launched when a user decision is required. */
     const val CHOOSER_ACTIVITY = "$MODULE_PACKAGE.ui.UsbChooserActivity"
@@ -43,25 +47,7 @@ object ModuleConstants {
      */
     const val ACTION_DISMISS_CHOOSER = "$MODULE_PACKAGE.action.DISMISS_CHOOSER"
 
-    /**
-     * Token embedded in every bridge broadcast / provider call (app ⇄ system_server)
-     * so the receiver / provider can drop spoofed traffic.
-     *
-     * Why a token in the extras instead of a custom permission string:
-     *   Custom `signature|privileged` permissions declared in AndroidManifest
-     * are granted to holders of our app certificate — but `system_server`
-     * (uid 1000) is signed with the PLATFORM key, not ours, so it would NEVER
-     * hold `BRIDGE_PERMISSION`. A receiver registered with
-     * `registerReceiver(receiver, filter, "com.tiger.usbmanager.permission.BRIDGE", null)`
-     * (or a provider with `android:permission="...BRIDGE"`) would therefore refuse
-     * every broadcast we send — which is what happened. The provider no longer
-     * declares a signature permission for this reason.
-     *
-     * Since we don't use `permission` on the receiver / provider side, we MUST include a
-     * per-build shared secret. Any third-party app that wants to impersonate
-     * the chooser must know this constant, which is only obtainable by
-     * decompiling this specific APK build.
-     */
+    /** Wire marker only. Sender signature permissions and provider UID checks enforce trust. */
     const val BRIDGE_TOKEN = "Z4U~{K9m!s[=qB7;Rc*T|6p@Wd%G<hV}"
 
     // ---- Intent extras ----

@@ -30,6 +30,8 @@ import com.tiger.usbmanager.R
 import com.tiger.usbmanager.withDisplayLanguage
 import com.tiger.usbmanager.auth.RecognitionSettings
 import com.tiger.usbmanager.bridge.UsbConfigSender
+import com.tiger.usbmanager.bridge.HostProviderClient
+import com.tiger.usbmanager.bridge.UsbBridgeContract
 import com.tiger.usbmanager.policy.UsbMode
 
 /** One-time chooser shown when the phone is connected to a USB host. */
@@ -42,6 +44,9 @@ open class UsbChooserActivity : ComponentActivity() {
     private var outcomeReported = false
     private var receiverRegistered = false
     private var closing = false
+    private var applying = false
+    private var cancelApply: (() -> Unit)? = null
+    private var publishedChoice: Bundle? = null
     private lateinit var chooserCard: MaterialCardView
     private lateinit var adbSwitch: SwitchMaterial
 
@@ -61,11 +66,15 @@ open class UsbChooserActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (editsDefaultConfiguration) ModuleSettings.init(this)
         token = intent?.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0) ?: 0
+        if (!editsDefaultConfiguration) {
+            publishedChoice = runCatching { HostProviderClient(this).chooser(token) }.getOrNull()
+            if (publishedChoice == null) { finish(); return }
+        }
         setContentView(chooserLayout())
         configureWindow()
         bindViews()
         applyIntentSelection()
-        onBackPressedDispatcher.addCallback(this) { closeAnimated("dismissed") }
+        onBackPressedDispatcher.addCallback(this) { if (!applying) closeAnimated("dismissed") }
         playEntranceAnimation()
     }
 
@@ -74,7 +83,7 @@ open class UsbChooserActivity : ComponentActivity() {
         if (editsDefaultConfiguration) return
         runCatching {
             val filter = IntentFilter(ModuleConstants.ACTION_DISMISS_CHOOSER)
-            ContextCompat.registerReceiver(this, dismissReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
+            ContextCompat.registerReceiver(this, dismissReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
             receiverRegistered = true
         }
     }
@@ -89,24 +98,32 @@ open class UsbChooserActivity : ComponentActivity() {
 
     override fun onDestroy() {
         optionColorAnimations.values.forEach { it.cancel() }
-        chooserCard.animate().cancel()
-        if (!editsDefaultConfiguration) reportOutcome("dismissed")
+        cancelApply?.invoke()
+        if (::chooserCard.isInitialized) chooserCard.animate().cancel()
+        if (!editsDefaultConfiguration && publishedChoice != null) reportOutcome("dismissed")
         super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
+        val choice = if (editsDefaultConfiguration) null else runCatching {
+            HostProviderClient(this).chooser(intent.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0))
+        }.getOrNull() ?: return
         super.onNewIntent(intent)
+        cancelApply?.invoke()
+        applying = false
+        publishedChoice = choice
         setIntent(intent)
         token = intent.getIntExtra(ModuleConstants.EXTRA_TOKEN, 0)
         outcomeReported = false
         closing = false
         applyIntentSelection()
+        setApplying(false)
         playEntranceAnimation()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (closing) return
+        if (closing || !::chooserCard.isInitialized) return
         val mode = selectedMode
         val adbEnabled = adbSwitch.isChecked
         chooserCard.animate().cancel()
@@ -117,6 +134,7 @@ open class UsbChooserActivity : ComponentActivity() {
         adbSwitch.isChecked = adbEnabled
         selectMode(mode, animate = false)
         configureWindow()
+        setApplying(applying)
     }
 
     private fun chooserLayout() = if (landscape()) R.layout.activity_usb_chooser_wide else R.layout.activity_usb_chooser
@@ -198,15 +216,20 @@ open class UsbChooserActivity : ComponentActivity() {
                         .apply()
                     setResult(RESULT_OK)
                 } else {
-                    RecognitionSettings.recordChooserSelection(this@UsbChooserActivity, selectedMode, adbSwitch.isChecked)
-                    UsbConfigSender.apply(this@UsbChooserActivity, selectedMode, adbSwitch.isChecked)
-                    reportOutcome("confirmed")
-                    Toast.makeText(
-                        this@UsbChooserActivity,
-                        getString(R.string.auth_saved_config, getString(selectedMode.displayRes),
-                            if (adbSwitch.isChecked) getString(R.string.auth_adb_enabled) else ""),
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                    if (applying) return@setOnClickListener
+                    val mode = selectedMode
+                    val adb = adbSwitch.isChecked
+                    setApplying(true)
+                    cancelApply = UsbConfigSender.apply(this@UsbChooserActivity, token, mode, adb) { success ->
+                        if (isDestroyed || isFinishing || closing) return@apply
+                        setApplying(false)
+                        if (success) {
+                            RecognitionSettings.recordChooserSelection(this@UsbChooserActivity, mode, adb)
+                            reportOutcome("confirmed")
+                            closeAnimated(null)
+                        } else Toast.makeText(this@UsbChooserActivity, R.string.chooser_apply_failed, Toast.LENGTH_LONG).show()
+                    }
+                    return@setOnClickListener
                 }
                 closeAnimated(null)
             }
@@ -215,13 +238,24 @@ open class UsbChooserActivity : ComponentActivity() {
 
     private fun applyIntentSelection() {
         val mode = if (editsDefaultConfiguration) UsbMode.fromWire(ModuleSettings.defaultMode())
-            else UsbMode.fromWire(intent?.getStringExtra(ModuleConstants.EXTRA_USB_MODE))
+            else UsbMode.fromWire(publishedChoice?.getString(UsbBridgeContract.KEY_MODE))
         val rawAdb = if (editsDefaultConfiguration) ModuleSettings.defaultAdb()
-            else intent?.getBooleanExtra(ModuleConstants.EXTRA_ADB_ENABLED, false) ?: false
-        val caller = callingActivity
-        val trustedPublisher = caller == null || caller.packageName == ModuleConstants.MODULE_PACKAGE
-        adbSwitch.isChecked = rawAdb && trustedPublisher
+            else publishedChoice?.getBoolean(UsbBridgeContract.KEY_ADB, false) ?: false
+        adbSwitch.isChecked = rawAdb
         selectMode(mode, animate = false)
+    }
+
+    private fun setApplying(value: Boolean) {
+        applying = value
+        optionViews.values.forEach { it.card.isEnabled = !value }
+        adbSwitch.isEnabled = !value
+        findViewById<View>(R.id.adb_option).isEnabled = !value
+        findViewById<View>(R.id.cancel_button).isEnabled = !value
+        findViewById<MaterialButton>(R.id.confirm_button).apply {
+            isEnabled = !value
+            setText(if (value) R.string.chooser_applying else R.string.chooser_confirm)
+        }
+        setFinishOnTouchOutside(!value)
     }
 
     private fun applyXmlPalette(view: View) {

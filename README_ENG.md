@@ -4,7 +4,7 @@
 [![GitHub Downloads](https://img.shields.io/github/downloads/Xposed-Modules-Repo/com.tiger.usbmanager/total?label=Downloads)](https://github.com/Xposed-Modules-Repo/com.tiger.usbmanager/releases)
 [![License](https://img.shields.io/badge/license-Mulan%20PubL%20v2-blue)](https://license.coscl.org.cn/MulanPubL-2.0)
 [![KernelSU](https://img.shields.io/badge/Root-KernelSU-orange.svg)](https://kernelsu.org)
-[![LSPosed](https://img.shields.io/badge/LSPosed-API%20101%2B-purple.svg)](https://github.com/LSPosed/LSPosed)
+[![LSPosed](https://img.shields.io/badge/LSPosed-API%20102%2B-purple.svg)](https://github.com/LSPosed/LSPosed)
 
 [中文](README.md) | English
 
@@ -50,7 +50,7 @@ An Android system module based on the **LSPosed** framework. When the phone is c
 
 * An Android device with an unlocked bootloader and root access.
 
-* An **LSPosed**-compatible framework implementing modern Xposed API 101 or later.
+* An **LSPosed**-compatible framework implementing modern Xposed API 102 or later.
 
 * The APK requires Android 8.0 (API 26) or later. Module operation also depends on framework and system USB implementation compatibility.
 
@@ -72,6 +72,8 @@ An Android system module based on the **LSPosed** framework. When the phone is c
 The defaults are Charge only, USB debugging off, ADB off on unplug enabled, and chooser display while locked disabled. These options are configurable on the main page.
 
 ## Building
+
+The app does not support backup or restore. System cloud backup and device transfer are disabled.
 
     git clone https://github.com/TigerSpirit217/USBManager.git
     cd USBManager

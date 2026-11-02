@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chooser_applying">Applying…</string>
+    <string name="chooser_apply_failed">Could not confirm the change. Check the current state and retry.</string>
+    <string name="auth_list_failed">Could not load computers. Check root access and the recognition scheme.</string>
+    <string name="action_retry">Retry</string>
+    <string name="activation_health_details">USB hook: %1$s · Service: %2$s\nADB hook: %3$s · Service: %4$s\nRuntime connection OK</string>
+    <string name="activation_runtime_unavailable">Module loaded, but the runtime did not respond. Restart the phone and check again.</string>
+</resources>

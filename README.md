@@ -4,7 +4,7 @@
 [![GitHub Downloads](https://img.shields.io/github/downloads/Xposed-Modules-Repo/com.tiger.usbmanager/total?label=Downloads)](https://github.com/Xposed-Modules-Repo/com.tiger.usbmanager/releases)
 [![License](https://img.shields.io/badge/license-Mulan%20PubL%20v2-blue)](https://license.coscl.org.cn/MulanPubL-2.0)
 [![KernelSU](https://img.shields.io/badge/Root-KernelSU-orange.svg)](https://kernelsu.org)
-[![LSPosed](https://img.shields.io/badge/LSPosed-API%20101%2B-purple.svg)](https://github.com/LSPosed/LSPosed)
+[![LSPosed](https://img.shields.io/badge/LSPosed-API%20102%2B-purple.svg)](https://github.com/LSPosed/LSPosed)
 
 中文 | [English](README_ENG.md)
 
@@ -61,7 +61,7 @@
 
 * 已解锁 Bootloader 并取得 root 的 Android 设备。
 
-* 已安装支持现代 Xposed API 101 或更高版本的 **LSPosed** 兼容框架。
+* 已安装支持现代 Xposed API 102 或更高版本的 **LSPosed** 兼容框架。
 
 * APK 最低要求 Android 8.0（API 26）；设备能否运行模块还取决于框架和系统 USB 实现的兼容性。
 
@@ -81,6 +81,8 @@
 3. 点击「确定」应用。
 
 默认 USB 模式为**仅充电**，默认关闭 USB 调试；拔线自动关闭 ADB 默认开启，锁屏弹窗默认关闭。这些选项均可在应用主页修改。
+
+应用不支持备份与恢复，已禁用系统云备份和设备迁移。
 
 ## 构建
 

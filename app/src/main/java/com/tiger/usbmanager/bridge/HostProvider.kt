@@ -28,10 +28,15 @@ class HostProvider : ContentProvider() {
     private var authSession = 0L
     private var authResult: AuthResult? = null
 
-    /** In-memory pending apply (written by chooser UI, polled by system_server watcher).
-     *  Volatile so binder thread reads are visible; single slot because there is at
-     *  most one chooser live at a time. */
-    @Volatile private var pendingApplyJson: String? = null
+    /** A single session owns the request; the lock makes claiming and completion atomic. */
+    private val applyLock = Any()
+    private var pendingApply: PendingApplyPayload? = null
+    private var pendingWrittenAt = 0L
+    private var chooserToken = 0
+    private var chooserConfig: Bundle? = null
+    private val applyResults = linkedMapOf<String, Int>()
+    private lateinit var runtimePrefs: android.content.SharedPreferences
+    private var bootCount = -1
     private val packageLock = Any()
     private var packageRequest = ""
     private var packageNamesResult: Bundle? = null
@@ -40,6 +45,16 @@ class HostProvider : ContentProvider() {
     override fun onCreate(): Boolean {
         val ctx = context ?: return false
         ModuleSettings.init(ctx)
+        runtimePrefs = ctx.getSharedPreferences("usbmanager_runtime", android.content.Context.MODE_PRIVATE)
+        bootCount = android.provider.Settings.Global.getInt(ctx.contentResolver, android.provider.Settings.Global.BOOT_COUNT, -1)
+        // Notification sessions remain usable after process death, but never after reboot.
+        if (bootCount >= 0 && runtimePrefs.getInt("boot", -2) == bootCount) {
+            chooserToken = runtimePrefs.getInt("token", 0)
+            if (chooserToken > 0) chooserConfig = Bundle().apply {
+                putString(UsbBridgeContract.KEY_MODE, runtimePrefs.getString("mode", "none"))
+                putBoolean(UsbBridgeContract.KEY_ADB, runtimePrefs.getBoolean("adb", false))
+            }
+        }
         return true
     }
 
@@ -61,9 +76,16 @@ class HostProvider : ContentProvider() {
                 UsbBridgeContract.METHOD_GET_PACKAGE_NAMES,
                 UsbBridgeContract.METHOD_GET_PACKAGE_APPS ->
                     if (callingUid != android.os.Process.myUid()) return@runCatching null
+                UsbBridgeContract.METHOD_PUT_PENDING_APPLY,
+                UsbBridgeContract.METHOD_GET_CHOOSER ->
+                    if (callingUid != android.os.Process.myUid()) return@runCatching null
                 UsbBridgeContract.METHOD_GET_PACKAGE_REQUEST,
                 UsbBridgeContract.METHOD_PUBLISH_PACKAGE_NAMES,
                 UsbBridgeContract.METHOD_PUBLISH_PACKAGE_APPS ->
+                    if (callingUid != android.os.Process.SYSTEM_UID) return@runCatching null
+                UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY,
+                UsbBridgeContract.METHOD_BEGIN_CHOOSER,
+                UsbBridgeContract.METHOD_SET_APPLY_RESULT ->
                     if (callingUid != android.os.Process.SYSTEM_UID) return@runCatching null
             }
 
@@ -124,7 +146,45 @@ class HostProvider : ContentProvider() {
                     Bundle().apply { putParcelableArrayList(UsbBridgeContract.KEY_PACKAGE_APPS, page) }
                 }
                 UsbBridgeContract.METHOD_PUT_PENDING_APPLY -> handlePutPendingApply(extras)
-                UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY -> handleGetAndClearPendingApply()
+                UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY -> handleGetAndClearPendingApply(arg)
+                UsbBridgeContract.METHOD_BEGIN_CHOOSER -> synchronized(applyLock) {
+                    val token = extras?.getInt(UsbBridgeContract.KEY_CHOOSER_TOKEN) ?: 0
+                    if (token <= 0) return@synchronized null
+                    // Commit before activity launch so reclaiming the app cannot lose the session.
+                    if (!runtimePrefs.edit().putInt("boot", bootCount).putInt("token", token)
+                            .putString("mode", extras?.getString(UsbBridgeContract.KEY_MODE))
+                            .putBoolean("adb", extras?.getBoolean(UsbBridgeContract.KEY_ADB) ?: false).commit())
+                        return@synchronized null
+                    pendingApply = null
+                    chooserToken = token
+                    chooserConfig = Bundle(extras)
+                    applyResults.replaceAll { _, result -> if (result == 0) ModuleConstants.RESULT_LIVE_FAILED else result }
+                    Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, true) }
+                }
+                UsbBridgeContract.METHOD_GET_CHOOSER -> synchronized(applyLock) {
+                    if (chooserToken > 0 && arg == chooserToken.toString()) chooserConfig?.let(::Bundle) else null
+                }
+                UsbBridgeContract.METHOD_CLOSE_CHOOSER -> synchronized(applyLock) {
+                    if (arg == chooserToken.toString()) {
+                        runtimePrefs.edit().clear().commit()
+                        chooserToken = 0; chooserConfig = null; pendingApply = null
+                        applyResults.replaceAll { _, result -> if (result == 0) ModuleConstants.RESULT_LIVE_FAILED else result }
+                    }
+                    Bundle()
+                }
+                UsbBridgeContract.METHOD_SET_APPLY_RESULT -> synchronized(applyLock) {
+                    val result = extras?.getInt(UsbBridgeContract.KEY_APPLY_RESULT)
+                    if (arg != null && applyResults[arg] == 0 && result in setOf(ModuleConstants.RESULT_LIVE_APPLIED, ModuleConstants.RESULT_LIVE_FAILED))
+                        applyResults[arg] = checkNotNull(result)
+                    Bundle()
+                }
+                UsbBridgeContract.METHOD_GET_APPLY_RESULT -> synchronized(applyLock) {
+                    if (applyResults[arg] == 0 && android.os.SystemClock.elapsedRealtime() - pendingWrittenAt >= 12_000L) {
+                        applyResults[checkNotNull(arg)] = ModuleConstants.RESULT_LIVE_FAILED
+                        if (pendingApply?.requestId == arg) pendingApply = null
+                    }
+                    Bundle().apply { putInt(UsbBridgeContract.KEY_APPLY_RESULT, applyResults[arg] ?: ModuleConstants.RESULT_LIVE_FAILED) }
+                }
                 UsbBridgeContract.METHOD_START_AUTH -> handleStartAuth(extras)
                 UsbBridgeContract.METHOD_GET_AUTH_RESULT -> handleGetAuthResult(extras)
                 UsbBridgeContract.METHOD_CANCEL_AUTH -> handleCancelAuth(extras)
@@ -194,18 +254,35 @@ class HostProvider : ContentProvider() {
     private fun handlePutPendingApply(extras: Bundle?): Bundle {
         val json = extras?.getString(UsbBridgeContract.KEY_PENDING_JSON)
             ?: return Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, false) }
-        pendingApplyJson = json
-        Log.i(TAG, "handlePutPendingApply: jsonLen=${json.length}")
-        return Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, true) }
+        require(json.length <= 2048)
+        val payload = PendingApplyPayload.fromJson(json)
+        val accepted = synchronized(applyLock) {
+            if (chooserToken == 0 || payload.chooserToken != chooserToken || !payload.confirmed) false
+            else if (applyResults.containsKey(payload.requestId)) true
+            else if (applyResults.values.any { it == 0 }) false
+            else {
+                while (applyResults.size >= 16) applyResults.remove(applyResults.keys.first())
+                applyResults[payload.requestId] = 0
+                pendingApply = payload
+                pendingWrittenAt = android.os.SystemClock.elapsedRealtime()
+                true
+            }
+        }
+        if (accepted) runCatching { context?.contentResolver?.notifyChange(UsbBridgeContract.PENDING_APPLY_URI, null) }
+            .onFailure { Log.w(TAG, "USB request notification failed", it) }
+        return Bundle().apply { putBoolean(UsbBridgeContract.KEY_RESULT, accepted) }
     }
 
-    private fun handleGetAndClearPendingApply(): Bundle {
-        val json = pendingApplyJson
-        pendingApplyJson = null
-        Log.i(TAG, "handleGetAndClearPendingApply: present=${json != null}")
-        return Bundle().apply {
-            if (json != null) putString(UsbBridgeContract.KEY_RESULT, json)
+    private fun handleGetAndClearPendingApply(id: String?): Bundle = synchronized(applyLock) {
+        val payload = pendingApply
+        val result = Bundle()
+        if (payload != null && (id == null || id == payload.requestId)) {
+            pendingApply = null
+            if (payload.chooserToken == chooserToken && android.os.SystemClock.elapsedRealtime() - pendingWrittenAt < 12_000L)
+                result.putString(UsbBridgeContract.KEY_RESULT, payload.toJson())
+            else applyResults[payload.requestId] = ModuleConstants.RESULT_LIVE_FAILED
         }
+        result
     }
 
     private fun handleGetSettings(): Bundle {

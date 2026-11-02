@@ -69,6 +69,7 @@ internal class UsbDeviceManagerHook(
                         result
                     }
                 env.info("[USB] Constructor hook installed: $ctor")
+                RuntimeHealth.usbHookInstalled = true
             }.onFailure { env.error("[USB] Failed to hook UsbDeviceManager constructor $ctor", it) }
         }
     }

@@ -57,10 +57,8 @@ import com.tiger.usbmanager.policy.GameDndPolicy
  *      (and the notification itself when it's off). This works on Android 11+,
  *      is officially supported, and never requires `SYSTEM_ALERT_WINDOW`.
  *
- * Both launching paths converge on the pending-apply poll loop: the chooser's
- * choice is written into the module ContentProvider mailbox and polled from
- * system_server, which guarantees the configuration is applied even if the
- * broadcast path is throttled.
+ * Both launch paths use the same provider-owned request and result mailbox.
+ * A content observer and a signature-protected broadcast wake the runtime.
  */
 internal class UsbStateWatcher(
     private val env: HookEnv,
@@ -92,13 +90,9 @@ internal class UsbStateWatcher(
      *  before settling" bug. */
     @Volatile private var pendingDisconnectRunnable: Runnable? = null
 
-    // ---- Pending-apply polling state ----
-    // Id of the poll loop runnable so we can cancel it when USB disconnects or
-    // when the user cancels the chooser (via CHOOSER_CLOSED).
-    @Volatile private var pendingPollGeneration: Int = 0
-    // Has a pending payload already been applied? Prevents double-apply when
-    // both broadcast path + poll path deliver the same choice.
-    @Volatile private var lastAppliedAtMs: Long = 0L
+    // The provider atomically claims each request ID once.
+    private var activeChoice: PendingApplyPayload? = null
+    private var choicesObserver: android.database.ContentObserver? = null
     // Until when a CONNECTED edge is treated as a re-enumeration caused by a config
     // change (mode/ADB toggle) rather than a fresh plug. See REENUM_SUPPRESS_MS.
     @Volatile private var suppressConnectUntilMs: Long = 0L
@@ -146,12 +140,6 @@ internal class UsbStateWatcher(
         private const val CHANNEL_ID = "usb_chooser"
         private const val NOTIF_TAG = "com.tiger.usbmanager.chooser"
 
-        /** Poll interval for the ContentProvider pending-apply mailbox (ms). */
-        private const val POLL_INTERVAL_MS = 1000L
-        /** Maximum number of polls before giving up (~30 s). */
-        private const val POLL_MAX_ATTEMPTS = 30
-        /** Dedup window for applying the same pending payload (ms). */
-        private const val APPLY_DEDUP_WINDOW_MS = 5_000L
 
         /** Window (ms) after applying a config (or turning ADB off) during which a
          *  CONNECTED event is treated as a gadget re-enumeration rather than a new
@@ -180,25 +168,20 @@ internal class UsbStateWatcher(
         handler.post {
             if (token != pendingChooserToken) return@post
             if (outcome != "confirmed") {
-                // User cancelled / dismissed the chooser — no point polling
-                // any further; there's nothing to apply.
-                pendingPollGeneration += 1
-                env.info("[WATCHER] chooser $outcome; cancelling pending-apply poll loop")
+                invalidatePendingChoice()
+                env.info("[WATCHER] chooser $outcome; request invalidated")
             }
+            cancelChooserNotification()
+            pendingChooserToken = 0
         }
     }
 
-    /**
-     * Called by SystemServerReceiver / the poll path after applying the USB config
-     * chosen via APPLY_USB_CONFIG (may arrive without a preceding CHOOSER_CLOSED=confirmed
-     * on some OEM dispatch timings). Records the apply timestamp so the poll path can
-     * dedup a broadcast-vs-poll double delivery.
-     */
+    /** Called after a configuration is accepted; the chooser also verifies actual state first. */
     fun onChooserApplied(mode: UsbMode, adb: Boolean) {
         env.info("[WATCHER] onChooserApplied mode=$mode adb=$adb")
         handler.post {
             val now = System.currentTimeMillis()
-            lastAppliedAtMs = now
+
             val settings = runCatching { hostClient.settings() }
                 .onFailure { env.warn("[AUTH] settings lookup after chooser failed", it) }
                 .getOrDefault(ModuleSettingsSnapshot(UsbMode.CHARGING, false, true))
@@ -220,12 +203,13 @@ internal class UsbStateWatcher(
         pendingConnectRunnable = null
         clearTransitionRetry()
         cancelDeferredChooser()
-        pendingPollGeneration += 1
+        invalidatePendingChoice()
         // Discard an older automatic recognition result: the status page has superseded its decision.
         authGeneration += 1
         authTransitionUntilMs = 0L
         cancelChooserNotification()
         dismissChooserActivity()
+        pendingChooserToken = 0
         env.info("[WATCHER] status-page decision: protecting USB re-enumeration before applying")
     }
 
@@ -420,13 +404,12 @@ internal class UsbStateWatcher(
         ) ?: return false
         clearTransitionRetry()
         cancelDeferredChooser()
-        pendingPollGeneration += 1
+        invalidatePendingChoice()
         cancelChooserNotification()
         dismissChooserActivity()
         val now = System.currentTimeMillis()
         // Set guards before applying: switching USB functions can emit disconnects
         // synchronously, and must not be mistaken for another cable insertion.
-        lastAppliedAtMs = now
         authTransitionUntilMs = now + REENUM_SUPPRESS_MS
         suppressConnectUntilMs = authTransitionUntilMs
         val applied = runCatching { controller.applyConfig(config.mode, config.adb) }
@@ -522,20 +505,19 @@ internal class UsbStateWatcher(
         }
         // A reported physical unplug clears the guard immediately; ROMs without port status use the bounded timeout.
         liveTransitionUntilElapsedMs = 0L
-        // USB cable unplugged — stop any in-flight pending-apply poll loop
-        // (the chooser UI can't resolve anything useful for a cable that isn't
-        // connected anymore, and we'd otherwise keep polling for 30 s).
-        pendingPollGeneration += 1
+        // A request belonging to an unplugged cable must never be applied later.
+        invalidatePendingChoice()
         // Dismiss any lingering chooser FullScreenIntent notification so an
         // unhandled chooser doesn't stay on the lock screen / notification shade.
         cancelChooserNotification()
         // And explicitly tell any on-screen chooser activity to finish itself —
         // otherwise the window (launched via startActivity) stays up after unplug.
         dismissChooserActivity()
+        pendingChooserToken = 0
         // Drop any lock-deferred chooser: the cable is gone, no point re-launching
         // on a later unlock.
         cancelDeferredChooser()
-        env.info("[WATCHER] handleDisconnect ENTER; cancelled pending-apply poll loop generation=$pendingPollGeneration")
+        env.info("[WATCHER] handleDisconnect: chooser session invalidated")
         val settings: ModuleSettingsSnapshot = runCatching { hostClient.settings() }
             .onFailure { env.warn("[WATCHER] hostClient.settings lookup failed; using defaults", it) }
             .getOrDefault(ModuleSettingsSnapshot(UsbMode.CHARGING, false, true))
@@ -553,7 +535,7 @@ internal class UsbStateWatcher(
         clearTransitionRetry()
         authGeneration += 1
         suppressConnectUntilMs = 0L
-        lastAppliedAtMs = 0L
+
         UsbAuthRuntime.cancel(env, hostClient, currentAuthSession)
         currentAuthSession = 0L
 
@@ -614,9 +596,14 @@ internal class UsbStateWatcher(
         // settings may have changed since the initial cable insertion.
         val settings = runCatching { hostClient.settings() }.getOrNull()
         if (settings != null && applyGameDnd(ctx, settings)) return
-        pendingChooserToken += 1
+        invalidatePendingChoice()
+        pendingChooserToken = java.security.SecureRandom().nextInt(Int.MAX_VALUE - 1) + 1
         val token = pendingChooserToken
         lastChooserNotificationToken = token
+        if (!runCatching { hostClient.beginChooser(token, request.mode, request.adb) }.getOrDefault(false)) {
+            env.warn("Chooser session could not be registered")
+            return
+        }
         env.info("[WATCHER] launchChooser token=$token preselect=${request.mode} adb=${request.adb}")
 
         val intent = Intent().apply {
@@ -657,31 +644,17 @@ internal class UsbStateWatcher(
                 )
                 val title = strings.getString(R.string.chooser_notification_title)
                 val text = strings.getString(R.string.chooser_notification_text)
-                val notif: Notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    Notification.Builder(ctx, CHANNEL_ID)
-                        .setSmallIcon(android.R.drawable.ic_dialog_info)
-                        .setContentTitle(title)
-                        .setContentText(text)
-                        .setCategory(Notification.CATEGORY_EVENT)
-                        .setPriority(Notification.PRIORITY_MAX)
-                        .setVisibility(Notification.VISIBILITY_SECRET)
-                        .setOngoing(false)
-                        .setAutoCancel(true)
-                        .setFullScreenIntent(pi, true)
-                        .setContentIntent(pi)
-                        .build()
-                } else {
-                    @Suppress("DEPRECATION")
-                    Notification.Builder(ctx)
-                        .setSmallIcon(android.R.drawable.ic_dialog_info)
-                        .setContentTitle(title)
-                        .setContentText(text)
-                        .setPriority(Notification.PRIORITY_MAX)
-                        .setAutoCancel(true)
-                        .setFullScreenIntent(pi, true)
-                        .setContentIntent(pi)
-                        .build()
-                }
+                val notif = Notification.Builder(ctx, CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setContentTitle(title)
+                    .setContentText(text)
+                    .setCategory(Notification.CATEGORY_EVENT)
+                    .setVisibility(Notification.VISIBILITY_SECRET)
+                    .setOngoing(false)
+                    .setAutoCancel(true)
+                    .setFullScreenIntent(pi, true)
+                    .setContentIntent(pi)
+                    .build()
                 nm.notify(NOTIF_TAG, token, notif)
                 env.info("[WATCHER] FullScreenIntent notification posted token=$token")
             }.onFailure {
@@ -689,13 +662,8 @@ internal class UsbStateWatcher(
             }
         }
 
-        // ---- Path 3 (for the *response*, not the launch): poll the mailbox.
-        //   Regardless of how we launched the UI (startActivity or notification),
-        //   the APPLY_USB_CONFIG broadcast path is unreliable on Android 14+.
-        //   So we start a ~30 s poll loop on the main handler, which picks up
-        //   the user choice from the provider mailbox if/when UsbConfigSender
-        //   puts it there. This is the path that actually guarantees the apply.
-        startPendingApplyPoll(token)
+        // Also consume a request submitted during activity launch.
+        applyPendingChoice()
     }
 
     private fun ensureNotificationChannel(ctx: Context, strings: Context) {
@@ -742,78 +710,76 @@ internal class UsbStateWatcher(
         return ctx.createPackageContext(ModuleConstants.MODULE_PACKAGE, 0).withDisplayLanguage(configuration)
     }
 
-    // ---- Pending-apply mailbox polling (UsbConfigSender path 2 fallback) ----
-
-    private fun startPendingApplyPoll(token: Int) {
-        val generation = ++pendingPollGeneration
-        env.info("[WATCHER] startPendingApplyPoll token=$token gen=$generation (max attempts=$POLL_MAX_ATTEMPTS interval=${POLL_INTERVAL_MS}ms)")
-        // Discard any stale pending-apply left over from a previous chooser whose poll
-        // loop already timed out; otherwise a new chooser would immediately "hit" an old
-        // choice and apply it before the user even decides.
-        runCatching { hostClient.getAndClearPendingApply() }
-            .onFailure { env.warn("[WATCHER] discard stale pending-apply failed", it) }
-        handler.post { pollForPendingApply(token, generation, POLL_MAX_ATTEMPTS) }
+    /** Content notifications replace the old polling deadline and time-window deduplication. */
+    fun observePendingChoices(context: Context) {
+        if (choicesObserver != null) return
+        val observer = object : android.database.ContentObserver(handler) {
+            override fun onChange(selfChange: Boolean) { applyPendingChoice() }
+        }
+        runCatching {
+            context.contentResolver.registerContentObserver(
+                com.tiger.usbmanager.bridge.UsbBridgeContract.PENDING_APPLY_URI, false, observer)
+            choicesObserver = observer
+            applyPendingChoice()
+        }.onFailure { env.warn("USB request observation unavailable", it) }
     }
 
-    private fun pollForPendingApply(token: Int, generation: Int, attemptsLeft: Int) {
-        if (generation != pendingPollGeneration) {
-            env.info("[WATCHER] pollForPendingApply token=$token gen=$generation stale (current=$pendingPollGeneration); aborting")
-            return
-        }
-        if (attemptsLeft <= 0) {
-            env.info("[WATCHER] pollForPendingApply token=$token gen=$generation exhausted; user never tapped OK in time")
-            return
-        }
-        val payload: PendingApplyPayload? = runCatching { hostClient.getAndClearPendingApply() }
-            .onFailure { env.warn("[WATCHER] pollForPendingApply hostClient.getAndClearPendingApply threw", it) }
-            .getOrNull()
-        if (payload != null && payload.confirmed) {
-            env.info("[WATCHER] pollForPendingApply HIT token=$token gen=$generation attemptsLeft=$attemptsLeft mode=${payload.modeWire} adb=${payload.adb}")
-            // Dedup: if the broadcast path also delivered APPLY_USB_CONFIG within
-            // the last 5 s, don't apply twice (both toggle actions are idempotent,
-            // but the log spam is undesirable).
-            val now = System.currentTimeMillis()
-            if (now - lastAppliedAtMs < APPLY_DEDUP_WINDOW_MS) {
-                env.info("[WATCHER] pollForPendingApply dedup skip: broadcast path already applied ${now - lastAppliedAtMs}ms ago")
-            } else {
-                lastAppliedAtMs = now
-                applyPendingPayload(payload)
+    fun applyPendingChoice(requestId: String? = null) {
+        handler.post {
+            if (activeChoice != null) return@post
+            val payload = runCatching { hostClient.getAndClearPendingApply(requestId) }.getOrNull() ?: return@post
+            val mode = UsbMode.entries.firstOrNull { it.wireValue == payload.modeWire }
+            if (mode == null || payload.chooserToken != pendingChooserToken || !lastConnected || controller.physicalUsbConnected() == false) {
+                runCatching { hostClient.publishApplyResult(payload.requestId, ModuleConstants.RESULT_LIVE_FAILED) }
+                return@post
             }
-            // Payload delivered; stop polling (nothing more will arrive).
-            pendingPollGeneration += 1
-            return
+            activeChoice = payload
+            // Protect re-enumeration before the setter, including partial failures.
+            liveTransitionUntilElapsedMs = android.os.SystemClock.elapsedRealtime() + LIVE_REENUM_SUPPRESS_MS
+            suppressConnectUntilMs = System.currentTimeMillis() + LIVE_REENUM_SUPPRESS_MS
+            val applied = runCatching { controller.applyConfig(mode, payload.adb) }
+                .onFailure { env.warn("USB choice application failed", it) }.getOrDefault(false)
+            if (!applied) finishChoice(payload, mode, false)
+            else verifyChoice(payload, mode, android.os.SystemClock.elapsedRealtime() + 10_000L)
         }
-        if (payload != null && !payload.confirmed) {
-            env.info("[WATCHER] pollForPendingApply got payload but confirmed=false (cancelled); stopping")
-            pendingPollGeneration += 1
-            return
-        }
-        // Nothing there yet — reschedule.
-        val nextAttempts = attemptsLeft - 1
-        if (nextAttempts <= 0) {
-            env.info("[WATCHER] pollForPendingApply token=$token gen=$generation done — no choice ever submitted")
-            return
-        }
-        handler.postDelayed({
-            pollForPendingApply(token, generation, nextAttempts)
-        }, POLL_INTERVAL_MS)
     }
 
-    /** Mirrors the logic of SystemServerReceiver.handleApply so the poll path
-     *  behaves identically to the broadcast path. */
-    private fun applyPendingPayload(payload: PendingApplyPayload) {
-        val mode = UsbMode.fromWire(payload.modeWire)
-        val adb = payload.adb
-        env.info("[WATCHER] applyPendingPayload (via poll) mode=$mode adb=$adb")
-
-        Handler(Looper.getMainLooper()).post {
-            val applied = runCatching { controller.applyConfig(mode, adb) }
-                .onFailure { env.error("[WATCHER] applyPendingPayload: controller.applyConfig threw", it) }
-                .getOrDefault(false)
-            env.info("[WATCHER] applyPendingPayload: controller.applyConfig effective=$applied (true == both mode+adb applied)")
-
-            runCatching { onChooserApplied(mode, adb) }
-                .onFailure { env.error("[WATCHER] applyPendingPayload: onChooserApplied threw", it) }
+    private fun verifyChoice(payload: PendingApplyPayload, mode: UsbMode, deadline: Long) {
+        if (activeChoice?.requestId != payload.requestId) return
+        if (runCatching { hostClient.applyResult(payload.requestId) }.getOrDefault(ModuleConstants.RESULT_LIVE_FAILED) != 0) {
+            activeChoice = null
+            applyPendingChoice()
+            return
         }
+        val unplugged = payload.chooserToken != pendingChooserToken || controller.physicalUsbConnected() == false
+        val actualMode = runCatching {
+            controller.currentFunctions()?.let(com.tiger.usbmanager.policy.UsbStatusMode::fromFunctions)
+        }.getOrNull()
+        val actualAdb = runCatching {
+            android.provider.Settings.Global.getInt(env.requireContext().contentResolver,
+                android.provider.Settings.Global.ADB_ENABLED) != 0
+        }.getOrNull()
+        val success = !unplugged && actualMode == mode && actualAdb == payload.adb
+        if (success || unplugged || android.os.SystemClock.elapsedRealtime() >= deadline) {
+            finishChoice(payload, mode, success)
+        } else handler.postDelayed({ verifyChoice(payload, mode, deadline) }, 200L)
+    }
+
+    private fun finishChoice(payload: PendingApplyPayload, mode: UsbMode, success: Boolean) {
+        if (activeChoice?.requestId != payload.requestId) return
+        activeChoice = null
+        if (success) onChooserApplied(mode, payload.adb)
+        runCatching { hostClient.publishApplyResult(payload.requestId,
+            if (success) ModuleConstants.RESULT_LIVE_APPLIED else ModuleConstants.RESULT_LIVE_FAILED) }
+            .onFailure { env.warn("USB result delivery failed", it) }
+        applyPendingChoice()
+    }
+
+    private fun invalidatePendingChoice() {
+        activeChoice?.let { payload ->
+            runCatching { hostClient.publishApplyResult(payload.requestId, ModuleConstants.RESULT_LIVE_FAILED) }
+        }
+        activeChoice = null
+        runCatching { hostClient.closeChooser(pendingChooserToken) }
     }
 }

@@ -438,10 +438,19 @@ class UsbAuthenticationActivity : LocalizedActivity() {
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(progress) }
         target.addView(list)
         Thread {
-            val computers = runCatching { RootAuthManager.list(this) }.getOrDefault(emptyList())
+            val result = runCatching { RootAuthManager.list(applicationContext) }
             runOnUiThread {
                 if (content !== renderRoot || list.parent !== target || isFinishing || isDestroyed) return@runOnUiThread
                 list.removeView(progress)
+                if (result.isFailure) {
+                    list.addView(messageCard(getString(R.string.auth_list_failed)))
+                    list.addView(outlinedButton(getString(R.string.action_retry)) {
+                        target.removeView(list)
+                        loadKnownComputers(target)
+                    })
+                    return@runOnUiThread
+                }
+                val computers = result.getOrThrow()
                 if (computers.isEmpty()) list.addView(TextView(this).apply {
                     text = getString(R.string.auth_saved_empty); textSize = 14f; setTextColor(uiColor(R.color.text_secondary)); setPadding(dp(4), dp(8), dp(4), dp(8))
                 }) else computers.sortedByDescending { it.lastSeen }.forEach { list.addView(computerCard(it), verticalMargins(bottom = dp(10))) }
@@ -479,7 +488,9 @@ class UsbAuthenticationActivity : LocalizedActivity() {
             .setPositiveButton(R.string.auth_delete) { _, _ ->
                 Thread {
                     val ok = runCatching { RootAuthManager.delete(this, computer.id) }.getOrDefault(false)
-                    runOnUiThread { render(if (ok) null else getString(R.string.auth_save_failed)) }
+                    runOnUiThread {
+                        if (!isDestroyed && !isFinishing) render(if (ok) null else getString(R.string.auth_save_failed))
+                    }
                 }.start()
             }.showUsbDialog()
     }

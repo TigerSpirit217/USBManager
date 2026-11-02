@@ -13,6 +13,7 @@ import io.github.libxposed.api.XposedInterface
 internal object AdbServiceHook {
 
     @Volatile private var adbService: Any? = null
+    fun hasService(): Boolean = adbService != null
 
     fun debuggingManager(): Any? = adbService?.let { service ->
         service.javaClass.fieldOrNull("mDebuggingManager")?.get(service)
@@ -48,6 +49,7 @@ internal object AdbServiceHook {
                         }
                         result
                     }
+                RuntimeHealth.adbHookInstalled = true
             }.onFailure { env.warn("Failed to hook AdbService constructor", it) }
         }
     }

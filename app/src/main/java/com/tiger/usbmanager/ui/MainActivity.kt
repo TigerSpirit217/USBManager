@@ -87,7 +87,8 @@ class MainActivity : FragmentActivity() {
         ModuleSettings.init(this)
         savedInstanceState?.getString("activation_package")?.let {
             lastActivationStatus = ModuleActivationCheck.Status.Active(it,
-                savedInstanceState.getBoolean("activation_usb_hook"), savedInstanceState.getBoolean("activation_adb_hook"))
+                savedInstanceState.getBoolean("activation_usb_hook"), savedInstanceState.getBoolean("activation_adb_hook"),
+                savedInstanceState.getString("activation_details"))
         }
         appearanceChanging = savedInstanceState?.getBoolean("appearance_changing", false) ?: false
         selectedPage = Page.entries.getOrElse(savedInstanceState?.getInt("page", 0) ?: 0) { Page.HOME }
@@ -202,6 +203,7 @@ class MainActivity : FragmentActivity() {
         }
         installNavigationBar()
         usbStatusPage.setVisible(selectedPage == Page.STATUS)
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) usbStatusPage.start()
         setContentView(responsiveScreen(root))
         refreshActivationStatus()
         checkCompatibilityOnEntry()
@@ -538,10 +540,7 @@ class MainActivity : FragmentActivity() {
             is ModuleActivationCheck.Status.Active -> statusCard(
                 R.color.banner_active_bg, R.color.banner_active_text,
                 getString(R.string.activate_state_active),
-                getString(R.string.activate_body,
-                    getString(if (status.hasUsbDeviceManagerHook) R.string.activate_hook_ok else R.string.activate_hook_fail),
-                    getString(if (status.hasAdbHook) R.string.activate_hook_ok else R.string.activate_hook_fail), status.packageName),
-                actions = listOf(getString(R.string.action_recheck) to { refreshActivationStatus() }),
+                null,
             )
             is ModuleActivationCheck.Status.Inactive -> statusCard(
                 R.color.banner_inactive_bg, R.color.banner_inactive_text,
@@ -833,6 +832,7 @@ class MainActivity : FragmentActivity() {
             outState.putString("activation_package", it.packageName)
             outState.putBoolean("activation_usb_hook", it.hasUsbDeviceManagerHook)
             outState.putBoolean("activation_adb_hook", it.hasAdbHook)
+            outState.putString("activation_details", it.details)
         }
         outState.putBoolean("appearance_changing", appearanceChanging)
         outState.putInt("page", selectedPage.ordinal)

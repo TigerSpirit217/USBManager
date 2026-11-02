@@ -9,10 +9,14 @@
     <permission android:name="com.tiger.usbmanager.permission.MANAGE_ADB_AUTHORIZATIONS"
         android:protectionLevel="signature" />
     <uses-permission android:name="com.tiger.usbmanager.permission.MANAGE_ADB_AUTHORIZATIONS" />
+    <permission android:name="com.tiger.usbmanager.permission.CONTROL_USB"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.tiger.usbmanager.permission.CONTROL_USB" />
 
     <application
         android:name=".UsbManagerApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupOnly="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -65,17 +69,7 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.USBManager.Dialog" />
 
-        <!--
-            ContentProvider in the module app process. system_server queries it via
-            ContentResolver for the module-settings snapshot and the pending-apply
-            mailbox (the identification/memory "known-host" database was removed).
-            It is declared `android:exported="true"` (no signature permission) because
-            system_server (uid 1000) is signed with the PLATFORM key and can NEVER hold
-            a signature-protected module permission; requiring one would make every
-            system_server call throw SecurityException. Cross-process trust is established
-            instead by the BRIDGE_TOKEN inside each call's extras, exactly like the
-            broadcast receiver path.
-        -->
+        <!-- Provider calls authenticate Binder UIDs; custom command broadcasts require the app signature. -->
         <provider
             android:name=".bridge.HostProvider"
             android:authorities="com.tiger.usbmanager.hosts"

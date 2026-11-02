@@ -97,9 +97,9 @@ class HostProviderClient(context: Context) {
      * Polled by UsbStateWatcher after launching the chooser. Returns the payload
      * left by the chooser UI and clears it atomically, or null if nothing pending.
      */
-    fun getAndClearPendingApply(): PendingApplyPayload? {
+    fun getAndClearPendingApply(requestId: String? = null): PendingApplyPayload? {
         val result = runCatching {
-            resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY, null, tokenFor(null))
+            resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_GET_AND_CLEAR_PENDING_APPLY, requestId, tokenFor(null))
         }.onFailure { Log.e(TAG, "[CLIENT] getAndClearPendingApply FAILED", it) }.getOrNull()
         val json = result?.getString(UsbBridgeContract.KEY_RESULT) ?: return null
         val payload = runCatching { PendingApplyPayload.fromJson(json) }
@@ -108,6 +108,28 @@ class HostProviderClient(context: Context) {
         Log.i(TAG, "[CLIENT] getAndClearPendingApply → ${payload != null}")
         return payload
     }
+
+    fun beginChooser(token: Int, mode: UsbMode, adb: Boolean): Boolean =
+        resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_BEGIN_CHOOSER, null, Bundle().apply {
+            putInt(UsbBridgeContract.KEY_CHOOSER_TOKEN, token)
+            putString(UsbBridgeContract.KEY_MODE, mode.wireValue)
+            putBoolean(UsbBridgeContract.KEY_ADB, adb)
+        })?.getBoolean(UsbBridgeContract.KEY_RESULT) == true
+
+    fun chooser(token: Int): Bundle? = resolver.call(UsbBridgeContract.HOST_URI,
+        UsbBridgeContract.METHOD_GET_CHOOSER, token.toString(), null)
+
+    fun closeChooser(token: Int) {
+        resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_CLOSE_CHOOSER, token.toString(), null)
+    }
+
+    fun publishApplyResult(id: String, result: Int) {
+        resolver.call(UsbBridgeContract.HOST_URI, UsbBridgeContract.METHOD_SET_APPLY_RESULT, id,
+            Bundle().apply { putInt(UsbBridgeContract.KEY_APPLY_RESULT, result) })
+    }
+
+    fun applyResult(id: String): Int = resolver.call(UsbBridgeContract.HOST_URI,
+        UsbBridgeContract.METHOD_GET_APPLY_RESULT, id, null)?.getInt(UsbBridgeContract.KEY_APPLY_RESULT, 0) ?: 0
 
     private companion object {
         const val TAG = "USBManager"
@@ -127,6 +149,8 @@ data class PendingApplyPayload(
     val adb: Boolean,
     /** Used to reset outcome/confirmed timers in UsbStateWatcher. */
     val confirmed: Boolean = true,
+    val requestId: String,
+    val chooserToken: Int,
 ) {
     // Explicit wire names preserve compatibility across app/hook versions without
     // field reflection or keeping the model's Kotlin implementation from R8.
@@ -134,6 +158,8 @@ data class PendingApplyPayload(
         .put("modeWire", modeWire)
         .put("adb", adb)
         .put("confirmed", confirmed)
+        .put("requestId", requestId)
+        .put("chooserToken", chooserToken)
         .toString()
 
     companion object {
@@ -143,7 +169,12 @@ data class PendingApplyPayload(
             val adb = value.opt("adb") ?: false
             val confirmed = value.opt("confirmed") ?: false
             require(mode is String && adb is Boolean && confirmed is Boolean)
-            return PendingApplyPayload(mode, adb, confirmed)
+            require(UsbMode.entries.any { it.wireValue == mode })
+            val requestId = value.getString("requestId")
+            require(requestId.matches(Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")))
+            val chooserToken = value.getInt("chooserToken")
+            require(chooserToken > 0)
+            return PendingApplyPayload(mode, adb, confirmed, requestId, chooserToken)
         }
     }
 }

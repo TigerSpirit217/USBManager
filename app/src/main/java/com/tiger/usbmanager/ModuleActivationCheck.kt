@@ -4,26 +4,16 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
-/**
- * App-side helper that checks whether the module is active in system_server.
- *
- * Strategy (from most reliable to least):
- *  1. Check the `sys.usbmanager.active` system property — set by
- *     [UsbManagerModule.onSystemServerStarting] ONLY after the system_server hooks
- *     are confirmed installed. This is the only signal that proves the hook bundle
- *     is live; a non-persist `sys.*` name is used so the value is cleared on reboot
- *     and cannot be left stale by a previous boot when the module was enabled. Without
- *     the module injected, property stays unset → falls through to LSPosed.
- *  2. Query the LSPosed service ContentProvider (`io.github.libxposed.service`)
- *     to see if LSPosed itself reports this package as an active module with
- *     `android` in scope.
- *  3. Fallback: return [Status.Unknown] and tell the user how to check manually.
- *
- * NOTE: The HostProvider runs in the module app process, NOT in system_server,
- * so it cannot report whether the hooks are installed. We intentionally do NOT
- * query it for activation status.
- */
+/** Queries live hook and service readiness. Load markers and framework metadata are fallback diagnostics. */
 object ModuleActivationCheck {
 
     /** High-level activation status returned to the UI. */
@@ -32,6 +22,7 @@ object ModuleActivationCheck {
             val packageName: String,
             val hasUsbDeviceManagerHook: Boolean,
             val hasAdbHook: Boolean,
+            val details: String? = null,
         ) : Status()
         /** Hook class definitely missing in system_server = user hasn't enabled scope. */
         data class Inactive(val reason: String) : Status()
@@ -42,17 +33,38 @@ object ModuleActivationCheck {
     fun check(context: Context): Status {
         val cr = context.contentResolver
 
+        // The callback runs on the main thread while this check runs on its worker.
+        check(Looper.myLooper() != Looper.getMainLooper())
+        val health = AtomicReference<Bundle?>()
+        val completed = CountDownLatch(1)
+        runCatching {
+            context.sendOrderedBroadcast(Intent(ModuleConstants.ACTION_QUERY_HEALTH).apply {
+                setPackage(ModuleConstants.SYSTEM_SERVER_PACKAGE)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            }, null, object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    if (resultCode == ModuleConstants.RESULT_HEALTH_AVAILABLE) health.set(getResultExtras(false))
+                    completed.countDown()
+                }
+            }, Handler(Looper.getMainLooper()), 0, null, null)
+            completed.await(2, TimeUnit.SECONDS)
+        }
+        health.get()?.let { state ->
+            fun mark(key: String) = context.getString(if (state.getBoolean(key)) R.string.activate_hook_ok else R.string.activate_hook_fail)
+            val details = context.getString(R.string.activation_health_details,
+                mark("usb_hook"), mark("usb_service"), mark("adb_hook"), mark("adb_service"))
+            return if (listOf("usb_hook", "usb_service", "adb_hook", "adb_service").all { state.getBoolean(it) })
+                Status.Active(ModuleConstants.MODULE_PACKAGE, true, true, details)
+            else Status.Unknown(details)
+        }
+
         // ---- 1) System property set by onModuleLoaded in system_server.
         //    android.os.SystemProperties is a hidden API, so we use reflection.
         val propActive = getSystemProperty(PROP_ACTIVE, "0")
         Log.i(TAG, "[CHECK] system property $PROP_ACTIVE = '$propActive'")
         if (propActive == "1") {
             Log.i(TAG, "[CHECK] module loaded in system_server (property=1)")
-            return Status.Active(
-                packageName = ModuleConstants.MODULE_PACKAGE,
-                hasUsbDeviceManagerHook = true,
-                hasAdbHook = true,
-            )
+            return Status.Unknown(context.getString(R.string.activation_runtime_unavailable))
         }
 
         // ---- 2) Query LSPosed service ContentProvider.

@@ -39,6 +39,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
     private val iconWorker = Executors.newSingleThreadExecutor()
     private val iconCache = LruCache<String, Bitmap>(48)
     private val iconsInFlight = mutableSetOf<String>()
+    private val failedIcons = mutableSetOf<String>()
     private val handler = Handler(Looper.getMainLooper())
     private val selected = mutableSetOf<String>()
     private var initiallySelected = emptySet<String>()
@@ -56,6 +57,8 @@ class GameDndAppPickerActivity : LocalizedActivity() {
     private lateinit var searchPanel: MaterialCardView
     private lateinit var searchAction: ImageView
     private var optionsMenu: ListPopupWindow? = null
+    private var sortedPackages = emptyList<CatalogApp>()
+    private val filterRequest = Runnable { filter() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -148,7 +151,10 @@ class GameDndAppPickerActivity : LocalizedActivity() {
         footer.addView(save)
         root.addView(footer)
         setContentView(root)
-        search.doAfterTextChanged { filter() }
+        search.doAfterTextChanged {
+            handler.removeCallbacks(filterRequest)
+            handler.postDelayed(filterRequest, 150L)
+        }
         search.setText(savedInstanceState?.getString("search").orEmpty())
         if (savedInstanceState?.getBoolean("search_expanded") == true || search.text.isNotEmpty()) {
             toggleSearch(show = true, requestKeyboard = false)
@@ -162,6 +168,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
                 result.onSuccess { names ->
                     packages = names
                     catalogLoaded = true
+                    preparePackages()
                     filter()
                 }.onFailure {
                     status.setText(R.string.game_dnd_load_failed)
@@ -172,22 +179,24 @@ class GameDndAppPickerActivity : LocalizedActivity() {
         }
     }
 
-    private fun filter() {
-        val query = search.text.toString().trim()
+    private fun preparePackages() {
         val knownPackages = packages.mapTo(mutableSetOf()) { it.packageName }
         // Hidden system apps retain their selection. Missing apps stay removable
         // after the catalog finishes, even when unchecked during this session.
         val missing = if (catalogLoaded) initiallySelected.filter { it !in knownPackages }
             .map { CatalogApp(it, it) } else emptyList()
-        visiblePackages = (packages + missing)
-            .filter { (showSystemApps || !it.isSystem) &&
-                (it.label.contains(query, ignoreCase = true) || it.packageName.contains(query, ignoreCase = true)) }
-            .sortedWith { a, b ->
+        sortedPackages = (packages + missing).sortedWith { a, b ->
                 val selectionOrder = (if (a.packageName in initiallySelected) 0 else 1) - (if (b.packageName in initiallySelected) 0 else 1)
                 if (selectionOrder != 0) return@sortedWith selectionOrder
                 val labelOrder = labelCollator.compare(a.label, b.label)
                 if (labelOrder != 0) labelOrder else a.packageName.compareTo(b.packageName)
             }
+    }
+
+    private fun filter() {
+        val query = search.text.toString().trim()
+        visiblePackages = sortedPackages.filter { (showSystemApps || !it.isSystem) &&
+            (it.label.contains(query, ignoreCase = true) || it.packageName.contains(query, ignoreCase = true)) }
         appAdapter.notifyDataSetChanged()
         if (catalogLoaded) {
             status.setText(R.string.game_dnd_no_apps)
@@ -354,7 +363,7 @@ class GameDndAppPickerActivity : LocalizedActivity() {
         val cached = iconCache.get(app.packageName)
         if (cached != null) { view.setImageBitmap(cached); return }
         view.setImageDrawable(packageManager.defaultActivityIcon)
-        if (isDestroyed || !iconsInFlight.add(app.packageName)) return
+        if (isDestroyed || app.packageName in failedIcons || !iconsInFlight.add(app.packageName)) return
         iconWorker.execute {
             val bitmap = runCatching {
                 val drawable = app.applicationInfo?.loadIcon(packageManager) ?: packageManager.defaultActivityIcon
@@ -369,9 +378,12 @@ class GameDndAppPickerActivity : LocalizedActivity() {
                 iconsInFlight.remove(app.packageName)
                 if (bitmap != null) {
                     iconCache.put(app.packageName, bitmap)
-                    // A recycled row must never receive another app's icon.
-                    appAdapter.notifyDataSetChanged()
-                }
+                    // Update only visible views still bound to this package.
+                    for (index in 0 until list.childCount) {
+                        val icon = (list.getChildAt(index).tag as? AppRow)?.icon ?: continue
+                        if (icon.tag == app.packageName) icon.setImageBitmap(bitmap)
+                    }
+                } else failedIcons.add(app.packageName)
             }
         }
     }

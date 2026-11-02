@@ -14,6 +14,7 @@ import com.tiger.usbmanager.ModuleConstants
 object UsbBridgeContract {
 
     val HOST_URI: Uri = Uri.parse("content://${ModuleConstants.HOST_AUTHORITY}")
+    val PENDING_APPLY_URI: Uri = Uri.withAppendedPath(HOST_URI, "pending-apply")
 
     // ---- ContentProvider.call() methods ----
 
@@ -41,6 +42,14 @@ object UsbBridgeContract {
 
     /** Atomically read + consume. Returns Bundle with KEY_RESULT JSON, or empty. */
     const val METHOD_GET_AND_CLEAR_PENDING_APPLY = "get_and_clear_pending_apply"
+    const val METHOD_BEGIN_CHOOSER = "begin_chooser"
+    const val METHOD_GET_CHOOSER = "get_chooser"
+    const val METHOD_CLOSE_CHOOSER = "close_chooser"
+    const val METHOD_SET_APPLY_RESULT = "set_apply_result"
+    const val METHOD_GET_APPLY_RESULT = "get_apply_result"
+    const val KEY_CHOOSER_TOKEN = "chooser_token"
+    const val KEY_REQUEST_ID = "request_id"
+    const val KEY_APPLY_RESULT = "apply_result"
     const val METHOD_START_AUTH = "start_auth"
     const val METHOD_GET_AUTH_RESULT = "get_auth_result"
     const val METHOD_CANCEL_AUTH = "cancel_auth"

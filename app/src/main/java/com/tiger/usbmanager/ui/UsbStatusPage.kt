@@ -39,18 +39,24 @@ internal class UsbStatusPage(private val activity: Activity) {
     private var adbOnly = false
     private var acknowledged = false
     private var generation = 0
+    private var started = false
 
-    fun start() = observer.start()
-    fun stop() = observer.stop()
+    fun start() { started = true; updateObservation() }
+    fun stop() { started = false; updateObservation() }
+    private fun updateObservation() {
+        if (started && (visible || pending != null)) observer.start() else observer.stop()
+    }
     fun setVisible(value: Boolean) {
         if (visible == value) return
         visible = value
+        updateObservation()
         feedbackMessage = 0
         if (!value) feedbackSession++
         feedback?.apply { animate().cancel(); text = ""; visibility = View.GONE }
         if (value && contentRoot != null) render(snapshot)
     }
     fun destroy() {
+        observer.stop()
         generation++; handler.removeCallbacksAndMessages(null)
         colorAnimations.values.forEach { it.cancel() }; colorAnimations.clear()
     }
@@ -299,6 +305,7 @@ internal class UsbStatusPage(private val activity: Activity) {
 
     private fun finish(message: Int) {
         pending = null
+        updateObservation()
         generation++
         handler.removeCallbacksAndMessages(null)
         feedbackMessage = if (visible && pendingSession == feedbackSession) message else 0

@@ -2,111 +2,59 @@ package com.tiger.usbmanager.bridge
 
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import com.tiger.usbmanager.ModuleConstants
 import com.tiger.usbmanager.policy.UsbMode
+import java.util.UUID
 
-/**
- * Sends the user's USB choice from the module app UI (UsbChooserActivity) to the
- * system_server hook runtime — via TWO redundant paths so the user never sees
- * "tap OK and nothing happens" again.
- *
- * ## Path 1 (fast, optimistic): Broadcast ACTION_APPLY_USB_CONFIG
- *
- * `setPackage("android")` is NOT used here: system_server registers receivers
- * **dynamically** and they are NOT associated with any installed app package.
- * `setPackage("android")` would silently drop the broadcast. Instead we tag
- * the intent with [ModuleConstants.BRIDGE_TOKEN] and the receiver drops
- * anything that doesn't match.
- *
- * ## Path 2 (reliable, polled): ContentProvider "pending-apply mailbox"
- *
- * On many OEM Android builds (NothingOS, MIUI, ColorOS) — especially Android 14+
- * — broadcasts from a third-party uid (u0_aXXX) to system_server's dynamically
- * registered receivers are throttled by the "background broadcast dispatch quota"
- * or by the binder-invocation firewall, so path 1 is silently dropped.
- *
- * To work around this we additionally write the full user choice into the
- * module-owned [HostProvider] via `resolver.call(METHOD_PUT_PENDING_APPLY, …)`.
- * The [com.tiger.usbmanager.hook.UsbStateWatcher] in system_server polls this
- * mailbox every ~1 s after launching the chooser (for up to 30 s) and if it
- * finds a payload there, applies it exactly the same way as path 1. Provider
- * `call()` is synchronous binder — not subject to any quota or firewall — so it
- * always works.
- */
+/** The provider owns each request; notifications and broadcasts only wake the runtime. */
 object UsbConfigSender {
-
-    private const val TAG = "USBManager"
-
-    /** `Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND` (added in API 34).
-     *  On older compiles we simply pass the numeric value — it's harmless to
-     *  set flags the system doesn't recognise (they're masked off). */
-    private const val FLAG_RECEIVER_INCLUDE_BACKGROUND_FALLBACK: Int = 0x01000000 or 0x00800000
-
-    @android.annotation.SuppressLint("WrongConstant") // Includes framework-internal receiver flags for OEM delivery.
-    fun apply(
-        context: Context,
-        mode: UsbMode,
-        adb: Boolean,
-    ) {
-        // ---- Path 1: broadcast (best-effort; dropped on many OEM Android 14+ builds) ----
-        val intent = Intent(ModuleConstants.ACTION_APPLY_USB_CONFIG).apply {
-            addFlags(
-                Intent.FLAG_RECEIVER_FOREGROUND or FLAG_RECEIVER_INCLUDE_BACKGROUND_FALLBACK,
-            )
-            putExtra(ModuleConstants.EXTRA_BRIDGE_TOKEN, ModuleConstants.BRIDGE_TOKEN)
-            putExtra(ModuleConstants.EXTRA_USB_MODE, mode.wireValue)
-            putExtra(ModuleConstants.EXTRA_ADB_ENABLED, adb)
+    /** Cancels the UI callback, not an already applied USB change. */
+    fun apply(context: Context, token: Int, mode: UsbMode, adb: Boolean, result: (Boolean) -> Unit): () -> Unit {
+        val client = HostProviderClient(context.applicationContext)
+        val handler = Handler(Looper.getMainLooper())
+        val id = UUID.randomUUID().toString()
+        val payload = PendingApplyPayload(mode.wireValue, adb, true, id, token)
+        var finished = false
+        val deadline = SystemClock.elapsedRealtime() + 14_000L
+        val poll = object : Runnable {
+            override fun run() {
+                if (finished) return
+                val answer = runCatching { client.applyResult(id) }.getOrDefault(0)
+                if (answer != 0 || SystemClock.elapsedRealtime() >= deadline) {
+                    finished = true
+                    result(answer == ModuleConstants.RESULT_LIVE_APPLIED)
+                } else handler.postDelayed(this, 250L)
+            }
         }
-        Log.i(TAG, "[SENDER] path1:sendBroadcast action=${intent.action} mode=$mode adb=$adb")
-        runCatching {
-            context.sendBroadcast(intent)
-        }.onSuccess {
-            Log.i(TAG, "[SENDER] path1: sendBroadcast returned OK")
-        }.onFailure {
-            Log.e(TAG, "[SENDER] path1: sendBroadcast FAILED", it)
-        }
-
-        // ---- Path 2: ContentProvider pending-apply mailbox (always works) ----
-        Log.i(TAG, "[SENDER] path2: writing pending-apply to HostProvider")
-        val client = HostProviderClient(context)
-        val payload = PendingApplyPayload(
-            modeWire = mode.wireValue,
-            adb = adb,
-            confirmed = true,
-        )
-        val written = runCatching { client.putPendingApply(payload) }
-            .onFailure { Log.e(TAG, "[SENDER] path2: putPendingApply exception", it) }
-            .getOrDefault(false)
-        Log.i(TAG, "[SENDER] path2: putPendingApply written=$written")
+        val written = runCatching { client.putPendingApply(payload) }.getOrDefault(false)
+        if (written) {
+            runCatching {
+                context.sendBroadcast(Intent(ModuleConstants.ACTION_APPLY_USB_CONFIG).apply {
+                    setPackage(ModuleConstants.SYSTEM_SERVER_PACKAGE)
+                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                    putExtra(ModuleConstants.EXTRA_REQUEST_ID, id)
+                    putExtra(ModuleConstants.EXTRA_BRIDGE_TOKEN, ModuleConstants.BRIDGE_TOKEN)
+                })
+            }.onFailure { Log.w("USBManager", "USB request wakeup failed", it) }
+            handler.post(poll)
+        } else handler.post { if (!finished) { finished = true; result(false) } }
+        return { finished = true; handler.removeCallbacksAndMessages(null) }
     }
 
-    /**
-     * Send a "user closed the chooser" notification to system_server without
-     * applying any config. Used to distinguish:
-     *   - "confirmed" (user pressed +ve button) → apply
-     *   - "cancelled" (user pressed -ve button) → nothing
-     *   - "dismissed" (user backed away / system killed the activity) → nothing
-     *
-     * This lets the watcher stop its pending-apply poll when the user did not confirm.
-     */
-    @android.annotation.SuppressLint("WrongConstant") // Same internal flags as the apply broadcast.
-    fun sendChooserClosed(
-        context: Context,
-        token: Int,
-        outcome: String, // "confirmed" | "cancelled" | "dismissed"
-    ) {
-        val intent = Intent(ModuleConstants.ACTION_CHOOSER_CLOSED).apply {
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND or FLAG_RECEIVER_INCLUDE_BACKGROUND_FALLBACK)
-            putExtra(ModuleConstants.EXTRA_BRIDGE_TOKEN, ModuleConstants.BRIDGE_TOKEN)
-            putExtra(ModuleConstants.EXTRA_TOKEN, token)
-            putExtra(ModuleConstants.EXTRA_OUTCOME, outcome)
-        }
-        Log.i(TAG, "[SENDER] chooser-closed token=$token outcome=$outcome")
+    fun sendChooserClosed(context: Context, token: Int, outcome: String) {
+        runCatching { HostProviderClient(context).closeChooser(token) }
         runCatching {
-            context.sendBroadcast(intent)
-        }.onFailure {
-            Log.e(TAG, "[SENDER] chooser-closed sendBroadcast failed", it)
-        }
+            context.sendBroadcast(Intent(ModuleConstants.ACTION_CHOOSER_CLOSED).apply {
+                setPackage(ModuleConstants.SYSTEM_SERVER_PACKAGE)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                putExtra(ModuleConstants.EXTRA_BRIDGE_TOKEN, ModuleConstants.BRIDGE_TOKEN)
+                putExtra(ModuleConstants.EXTRA_TOKEN, token)
+                putExtra(ModuleConstants.EXTRA_OUTCOME, outcome)
+            })
+        }.onFailure { Log.w("USBManager", "Chooser close notification failed", it) }
     }
 }
