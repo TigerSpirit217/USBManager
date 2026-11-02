@@ -1,9 +1,26 @@
 package com.tiger.usbmanager.ui
 
 import com.tiger.usbmanager.R
+import com.google.android.material.color.utilities.Hct
+import com.google.android.material.color.utilities.MathUtils
 
-/** Original palette: do not read back a resource already overridden by a custom seed. */
+/** Reference roles for every custom seed, preserving the original blue's tones and contrast. */
+@android.annotation.SuppressLint("RestrictedApi") // Uses the same pinned Material HCT APIs as DisplaySettings.
 internal object LegacyPalette {
+    private val referenceSeed by lazy { Hct.fromInt(DisplaySettings.DEFAULT_SEED) }
+    private val lightRoles by lazy { light.mapValues { (_, color) -> Hct.fromInt(color) } }
+    private val darkRoles by lazy { dark.mapValues { (_, color) -> Hct.fromInt(color) } }
+
+    fun fromSeed(seed: Int, dark: Boolean): Map<Int, Int> {
+        val selected = Hct.fromInt(seed)
+        val hueShift = selected.hue - referenceSeed.hue
+        val chromaScale = selected.chroma / referenceSeed.chroma
+        return (if (dark) darkRoles else lightRoles).mapValues { (_, role) ->
+            Hct.from(MathUtils.sanitizeDegreesDouble(role.hue + hueShift),
+                role.chroma * chromaScale, role.tone).toInt()
+        }
+    }
+
     val light = mapOf(
         R.color.usb_accent to 0xFF3478F6.toInt(),
         R.color.accent to 0xFF1565C0.toInt(),

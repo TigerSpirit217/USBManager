@@ -160,13 +160,8 @@ internal object DisplaySettings {
         val key = Key(source, isDark(context), dynamic)
         if (cache.size > 24) cache.clear()
         return cache.getOrPut(key) {
-            val hct = Hct.fromInt(source)
-            val scheme = SchemeFidelity(hct, key.dark, 0.0)
-            val palette = schemeColors(scheme).let { generated ->
-                if (!dynamic && source == DEFAULT_SEED)
-                    if (key.dark) LegacyPalette.dark else LegacyPalette.light
-                else generated
-            }
+            val palette = if (dynamic) schemeColors(SchemeFidelity(Hct.fromInt(source), key.dark, 0.0))
+                else LegacyPalette.fromSeed(source, key.dark)
             palette + (if (key.dark) SemanticPalette.dark else SemanticPalette.light) +
                 (R.color.control_ripple to ColorUtils.setAlphaComponent(palette.getValue(R.color.usb_accent), 32))
         }
