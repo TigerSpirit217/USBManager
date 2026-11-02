@@ -12,8 +12,8 @@ android {
         // libxposed API 102 requires API 26. Scheme packages set their own minimum.
         minSdk = 26
         targetSdk = 37
-        versionCode = 8
-        versionName = "8"
+        versionCode = 9
+        versionName = "9"
 
         // GitHub CI passes this property; local builds use the version fields above.
         providers.gradleProperty("ciVersionName").orNull?.let { ciVersionName ->
