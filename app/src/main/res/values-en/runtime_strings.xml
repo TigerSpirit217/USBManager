@@ -6,4 +6,9 @@
     <string name="action_retry">Retry</string>
     <string name="activation_health_details">USB hook: %1$s · Service: %2$s\nADB hook: %3$s · Service: %4$s\nRuntime connection OK</string>
     <string name="activation_runtime_unavailable">Module loaded, but the runtime did not respond. Restart the phone and check again.</string>
+    <string name="activation_usb_hook_missing">USB hook is not installed.</string>
+    <string name="activation_usb_service_missing">USB service instance is unavailable.</string>
+    <string name="activation_adb_hook_missing">ADB hook is not installed.</string>
+    <string name="activation_adb_service_missing">ADB service instance is unavailable.</string>
+    <string name="activation_check_failed_reason">Module check failed: %1$s</string>
 </resources>

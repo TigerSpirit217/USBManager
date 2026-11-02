@@ -6,4 +6,9 @@
     <string name="action_retry">重试</string>
     <string name="activation_health_details">USB Hook：%1$s · 服务：%2$s\nADB Hook：%3$s · 服务：%4$s\n模块通信正常</string>
     <string name="activation_runtime_unavailable">模块已加载，但通信未响应。请重启手机后重新检测。</string>
+    <string name="activation_usb_hook_missing">USB Hook 未安装。</string>
+    <string name="activation_usb_service_missing">未获取到 USB 服务实例。</string>
+    <string name="activation_adb_hook_missing">ADB Hook 未安装。</string>
+    <string name="activation_adb_service_missing">未获取到 ADB 服务实例。</string>
+    <string name="activation_check_failed_reason">模块检查失败：%1$s</string>
 </resources>

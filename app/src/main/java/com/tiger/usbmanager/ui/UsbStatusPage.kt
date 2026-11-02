@@ -40,11 +40,27 @@ internal class UsbStatusPage(private val activity: Activity) {
     private var acknowledged = false
     private var generation = 0
     private var started = false
+    private var moduleAvailable = false
+    private var authorizationButton: MaterialButton? = null
 
     fun start() { started = true; updateObservation() }
     fun stop() { started = false; updateObservation() }
     private fun updateObservation() {
-        if (started && (visible || pending != null)) observer.start() else observer.stop()
+        if (moduleAvailable && started && (visible || pending != null)) observer.start() else observer.stop()
+    }
+    fun setModuleAvailable(value: Boolean) {
+        if (moduleAvailable == value) return
+        moduleAvailable = value
+        if (!value) {
+            generation++
+            pending = null
+            acknowledged = false
+            feedbackMessage = 0
+            handler.removeCallbacksAndMessages(null)
+            snapshot = CurrentUsbSnapshot(null, null, null)
+        }
+        updateObservation()
+        render(snapshot)
     }
     fun setVisible(value: Boolean) {
         if (visible == value) return
@@ -128,7 +144,7 @@ internal class UsbStatusPage(private val activity: Activity) {
                             contentDescription = getString(R.string.status_adb_title)
                             useUsbManagerColors()
                             setOnCheckedChangeListener { _, checked ->
-                                if (!binding) { render(snapshot); apply(snapshot.mode ?: UsbMode.CHARGING, checked, true) }
+                                if (!binding && moduleAvailable) { render(snapshot); apply(snapshot.mode ?: UsbMode.CHARGING, checked, true) }
                             }
                         }
                         addView(adbSwitch)
@@ -158,10 +174,11 @@ internal class UsbStatusPage(private val activity: Activity) {
                         setPadding(0, dp(8), 0, dp(10))
                     })
                     addView(MaterialButton(activity).apply {
+                        authorizationButton = this
                         setText(R.string.adb_auth_manage); isAllCaps = false
                         useUsbManagerOutlinedColors()
                         setOnClickListener {
-                            startActivity(android.content.Intent(activity, AdbAuthorizationsActivity::class.java))
+                            if (moduleAvailable) startActivity(android.content.Intent(activity, AdbAuthorizationsActivity::class.java))
                         }
                     }, verticalMargins(bottom = 0))
                 })
@@ -201,7 +218,7 @@ internal class UsbStatusPage(private val activity: Activity) {
             modeButtons[mode] = this
             setOnClickListener {
                 val state = snapshot
-                if (pending == null && state.connected == true && state.adb != null && state.mode != mode) {
+                if (moduleAvailable && pending == null && state.connected == true && state.adb != null && state.mode != mode) {
                     performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
                     UiMotion.selected(this)
                     apply(mode, state.adb, false)
@@ -220,6 +237,8 @@ internal class UsbStatusPage(private val activity: Activity) {
         val before = snapshot
         if (pending == null && current != before) feedbackMessage = 0
         snapshot = current
+        contentRoot?.alpha = if (moduleAvailable) 1f else 0.45f
+        authorizationButton?.isEnabled = moduleAvailable
         with(activity) {
             if (current.connected != lastConnection && contentRoot?.isAttachedToWindow == true && UiMotion.enabled()) {
                 android.transition.TransitionManager.beginDelayedTransition(contentRoot,
@@ -232,7 +251,7 @@ internal class UsbStatusPage(private val activity: Activity) {
                 null -> getString(R.string.status_unavailable)
             })
             connectionHint?.setText(if (current.connected == true) R.string.status_connected_hint else R.string.status_disconnected_hint)
-            modeControls?.visibility = if (current.connected == true || pending?.connected == true && !adbOnly) View.VISIBLE else View.GONE
+            modeControls?.visibility = if (!moduleAvailable || current.connected == true || pending?.connected == true && !adbOnly) View.VISIBLE else View.GONE
             modeButtons.forEach { (mode, button) ->
                 val selected = current.connected == true && current.mode == mode
                 val target = uiColor(if (selected) R.color.usb_option_selected else R.color.usb_option_normal)
@@ -249,14 +268,14 @@ internal class UsbStatusPage(private val activity: Activity) {
                 val tint = ColorStateList.valueOf(uiColor(if (selected) R.color.on_accent_soft else R.color.text_secondary))
                 button.setTextColor(tint); button.iconTint = tint
                 button.isSelected = selected
-                button.isEnabled = current.connected == true && current.adb != null && pending == null
+                button.isEnabled = moduleAvailable && current.connected == true && current.adb != null && pending == null
                 androidx.core.view.ViewCompat.setStateDescription(button, getString(if (selected) R.string.display_selected else R.string.status_mode_available))
                 if (selected && before.mode != mode) UiMotion.selected(button)
             }
             binding = true
             adbSwitch?.isChecked = current.adb == true
             binding = false
-            adbSwitch?.isEnabled = current.adb != null && pending == null
+            adbSwitch?.isEnabled = moduleAvailable && current.adb != null && pending == null
             adbSwitch?.let { androidx.core.view.ViewCompat.setStateDescription(it, getString(when (current.adb) {
                 true -> R.string.status_adb_enabled; false -> R.string.status_adb_disabled; null -> R.string.status_unavailable
             })) }
@@ -274,7 +293,7 @@ internal class UsbStatusPage(private val activity: Activity) {
     }
 
     private fun apply(mode: UsbMode, adb: Boolean, onlyAdb: Boolean) {
-        if (pending != null) return
+        if (!moduleAvailable || pending != null) return
         val request = ++generation
         adbOnly = onlyAdb
         acknowledged = false

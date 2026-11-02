@@ -62,8 +62,8 @@
     <string name="activate_check_error">检测异常，请重新检测；详细原因可在模块日志中查看。</string>
     <string name="version_unknown">未知</string>
     <string name="activate_state_active">✅ 模块已激活</string>
-    <string name="activate_state_inactive">❌ 模块未生效</string>
-    <string name="activate_state_unknown">⚠️ 模块状态不明</string>
+    <string name="activate_state_inactive">❌ 模块未激活</string>
+    <string name="activate_state_unknown">❌ 模块未激活</string>
     <string name="activate_hook_ok">✔</string>
     <string name="activate_hook_fail">✘</string>
     <string name="activate_body">USB Hook: %1$s   ADB Hook: %2$s\n模块包名：%3$s</string>
@@ -99,8 +99,8 @@
     <string name="chooser_confirm">确定</string>
 
     <!-- ModuleActivationCheck -->
-    <string name="check_inactive_reason">请在 LSPosed 中启用模块，勾选 system 并重启手机。</string>
-    <string name="check_unknown_note">请重启手机后重新检测。</string>
+    <string name="check_inactive_reason">未检测到模块加载。请在 LSPosed 中启用模块，勾选 system 并重启手机。</string>
+    <string name="check_unknown_note">LSPosed 已启用模块，但运行状态无法确认。请重启手机后重新检测。</string>
 
     <!-- Notification (used inside system_server) -->
     <string name="notification_channel_name">USB 选择器</string>

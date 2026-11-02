@@ -63,7 +63,7 @@
     <string name="version_unknown">Unknown</string>
     <string name="activate_state_active">✅ Module active</string>
     <string name="activate_state_inactive">❌ Module inactive</string>
-    <string name="activate_state_unknown">⚠️ Module status unknown</string>
+    <string name="activate_state_unknown">❌ Module inactive</string>
     <string name="activate_hook_ok">✔</string>
     <string name="activate_hook_fail">✘</string>
     <string name="activate_body">USB hook: %1$s   ADB hook: %2$s\nModule package: %3$s</string>
@@ -99,8 +99,8 @@
     <string name="chooser_confirm">OK</string>
 
     <!-- ModuleActivationCheck -->
-    <string name="check_inactive_reason">Enable the module for system in LSPosed and restart the phone.</string>
-    <string name="check_unknown_note">Restart the phone and check again.</string>
+    <string name="check_inactive_reason">Module loading was not detected. Enable the module for system in LSPosed and restart the phone.</string>
+    <string name="check_unknown_note">LSPosed has enabled the module, but its runtime could not be verified. Restart the phone and check again.</string>
 
     <!-- Notification (used inside system_server) -->
     <string name="notification_channel_name">USB chooser</string>

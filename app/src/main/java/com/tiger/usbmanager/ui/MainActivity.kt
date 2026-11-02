@@ -58,6 +58,10 @@ class MainActivity : FragmentActivity() {
     private var themeColorDialog: ThemeColorDialog? = null
     private val usbStatusPage by lazy { UsbStatusPage(this) }
     private lateinit var activationStatusContainer: LinearLayout
+    private var statusActivationContainer: LinearLayout? = null
+    private var moduleAvailable = false
+    private val moduleFeatures = mutableListOf<ModuleFeature>()
+    private data class ModuleFeature(val root: View, val enabledStates: List<Pair<View, Boolean>>)
     private var lastActivationStatus: ModuleActivationCheck.Status? = null
     private val activationHandler = Handler(Looper.getMainLooper())
     private var activationGeneration = 0
@@ -85,11 +89,6 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         ModuleSettings.init(this)
-        savedInstanceState?.getString("activation_package")?.let {
-            lastActivationStatus = ModuleActivationCheck.Status.Active(it,
-                savedInstanceState.getBoolean("activation_usb_hook"), savedInstanceState.getBoolean("activation_adb_hook"),
-                savedInstanceState.getString("activation_details"))
-        }
         appearanceChanging = savedInstanceState?.getBoolean("appearance_changing", false) ?: false
         selectedPage = Page.entries.getOrElse(savedInstanceState?.getInt("page", 0) ?: 0) { Page.HOME }
         savedInstanceState?.getIntArray("page_scroll")?.takeIf { it.size == pageScroll.size }?.copyInto(pageScroll)
@@ -187,6 +186,8 @@ class MainActivity : FragmentActivity() {
         contentHost?.cancelScroll()
         pageViews.clear()
         developerFooters.clear()
+        moduleFeatures.clear()
+        statusActivationContainer = null
         defaultConfigSummaryView = null
         gameDndSummaryView = null
         contentHost = PageSwipeHost(this, selectedPage.ordinal,
@@ -304,8 +305,8 @@ class MainActivity : FragmentActivity() {
                     activationStatusContainer = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
                     lastActivationStatus?.let(::renderActivationStatus)
                     val overview = verticalContent(activationStatusContainer,
-                        sectionLabel(getString(R.string.auth_section_title)), authenticationCard())
-                    val settings = verticalContent(settingsCard())
+                        sectionLabel(getString(R.string.auth_section_title)), moduleFeature(authenticationCard()))
+                    val settings = verticalContent(moduleFeature(settingsCard()))
                     if (twoColumns()) addView(adaptiveColumns(overview, settings)) else {
                         // Preserve the established portrait order.
                         overview.removeView(activationStatusContainer); addView(activationStatusContainer)
@@ -313,7 +314,12 @@ class MainActivity : FragmentActivity() {
                         addView(overview)
                     }
                 }
-                Page.STATUS -> addView(usbStatusPage.content())
+                Page.STATUS -> {
+                    statusActivationContainer = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
+                    addView(statusActivationContainer)
+                    addView(usbStatusPage.content())
+                    renderStatusActivation(lastActivationStatus)
+                }
                 Page.SETTINGS -> {
                     addView(AppearancePage(this@MainActivity,
                         themeChanged = { changeAppearance() }, barChanged = { changeNavigationBar() },
@@ -501,7 +507,9 @@ class MainActivity : FragmentActivity() {
         Thread {
             val status = runCatching { ModuleActivationCheck.check(this) }.getOrElse {
                 android.util.Log.w("USBManager", "Activation check failed", it)
-                ModuleActivationCheck.Status.Unknown(getString(R.string.activate_check_error))
+                val cause = it.cause ?: it
+                val reason = cause.localizedMessage?.takeIf(String::isNotBlank)?.take(240) ?: cause.javaClass.simpleName
+                ModuleActivationCheck.Status.Unknown(getString(R.string.activation_check_failed_reason, reason))
             }
             activationHandler.post {
                 if (request != activationGeneration || isDestroyed || activationStatusContainer !== target) return@post
@@ -519,6 +527,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun showActivationLoading() {
+        setModuleAvailable(false)
         val previousHeight = activationStatusContainer.getChildAt(0)?.height?.takeIf { it > 0 }
         activationStatusContainer.removeAllViews()
         val loadingCard = statusCard(
@@ -530,28 +539,69 @@ class MainActivity : FragmentActivity() {
         )
         if (previousHeight != null) loadingCard.minimumHeight = previousHeight
         activationStatusContainer.addView(loadingCard)
+        renderStatusActivation(null)
     }
 
     private fun renderActivationStatus(status: ModuleActivationCheck.Status) {
         if (!::activationStatusContainer.isInitialized || !mainScreenVisible || isDestroyed) return
         lastActivationStatus = status
+        setModuleAvailable(status is ModuleActivationCheck.Status.Active &&
+            status.hasUsbDeviceManagerHook && status.hasAdbHook)
         activationStatusContainer.removeAllViews()
-        val view = when (status) {
-            is ModuleActivationCheck.Status.Active -> statusCard(
+        activationStatusContainer.addView(activationCard(status))
+        renderStatusActivation(status)
+    }
+
+    private fun activationCard(status: ModuleActivationCheck.Status): MaterialCardView =
+        if (status is ModuleActivationCheck.Status.Active && status.hasUsbDeviceManagerHook && status.hasAdbHook) statusCard(
                 R.color.banner_active_bg, R.color.banner_active_text,
                 getString(R.string.activate_state_active),
                 null,
             )
-            is ModuleActivationCheck.Status.Inactive -> statusCard(
-                R.color.banner_inactive_bg, R.color.banner_inactive_text,
-                getString(R.string.activate_state_inactive), status.reason, actions = statusActions(),
-            )
-            is ModuleActivationCheck.Status.Unknown -> statusCard(
-                R.color.banner_unknown_bg, R.color.banner_unknown_text,
-                getString(R.string.activate_state_unknown), status.note, actions = statusActions(),
-            )
+        else statusCard(
+            R.color.banner_inactive_bg, R.color.banner_inactive_text,
+            getString(R.string.activate_state_inactive), when (status) {
+                is ModuleActivationCheck.Status.Inactive -> status.reason
+                is ModuleActivationCheck.Status.Unknown -> status.note
+                is ModuleActivationCheck.Status.Active -> status.details ?: getString(R.string.activate_body,
+                    getString(if (status.hasUsbDeviceManagerHook) R.string.activate_hook_ok else R.string.activate_hook_fail),
+                    getString(if (status.hasAdbHook) R.string.activate_hook_ok else R.string.activate_hook_fail), status.packageName)
+            }, actions = statusActions(),
+        )
+
+    private fun renderStatusActivation(status: ModuleActivationCheck.Status?) {
+        statusActivationContainer?.apply {
+            removeAllViews()
+            visibility = if (moduleAvailable) View.GONE else View.VISIBLE
+            if (!moduleAvailable) addView(if (status != null) activationCard(status) else statusCard(
+                R.color.banner_loading_bg, R.color.banner_loading_text,
+                getString(R.string.activate_checking), null, loading = true,
+            ))
         }
-        activationStatusContainer.addView(view)
+    }
+
+    private fun moduleFeature(root: View): View {
+        val states = mutableListOf<Pair<View, Boolean>>()
+        fun collect(view: View) {
+            states.add(view to view.isEnabled)
+            if (view is ViewGroup) for (index in 0 until view.childCount) collect(view.getChildAt(index))
+        }
+        collect(root)
+        val feature = ModuleFeature(root, states)
+        moduleFeatures.add(feature)
+        applyModuleAvailability(feature)
+        return root
+    }
+
+    private fun applyModuleAvailability(feature: ModuleFeature) {
+        feature.root.alpha = if (moduleAvailable) 1f else 0.45f
+        feature.enabledStates.forEach { (view, enabled) -> view.isEnabled = moduleAvailable && enabled }
+    }
+
+    private fun setModuleAvailable(value: Boolean) {
+        moduleAvailable = value
+        moduleFeatures.forEach(::applyModuleAvailability)
+        usbStatusPage.setModuleAvailable(value)
     }
 
     private fun statusActions() = listOf(
@@ -828,12 +878,6 @@ class MainActivity : FragmentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         themeColorDialog?.saveState()?.let { outState.putBundle("theme_color_editor", it) }
         savePageScroll()
-        (lastActivationStatus as? ModuleActivationCheck.Status.Active)?.let {
-            outState.putString("activation_package", it.packageName)
-            outState.putBoolean("activation_usb_hook", it.hasUsbDeviceManagerHook)
-            outState.putBoolean("activation_adb_hook", it.hasAdbHook)
-            outState.putString("activation_details", it.details)
-        }
         outState.putBoolean("appearance_changing", appearanceChanging)
         outState.putInt("page", selectedPage.ordinal)
         outState.putIntArray("page_scroll", pageScroll)

@@ -55,7 +55,13 @@ object ModuleActivationCheck {
                 mark("usb_hook"), mark("usb_service"), mark("adb_hook"), mark("adb_service"))
             return if (listOf("usb_hook", "usb_service", "adb_hook", "adb_service").all { state.getBoolean(it) })
                 Status.Active(ModuleConstants.MODULE_PACKAGE, true, true, details)
-            else Status.Unknown(details)
+            else Status.Inactive(listOf(
+                "usb_hook" to R.string.activation_usb_hook_missing,
+                "usb_service" to R.string.activation_usb_service_missing,
+                "adb_hook" to R.string.activation_adb_hook_missing,
+                "adb_service" to R.string.activation_adb_service_missing,
+            ).filter { (key, _) -> !state.getBoolean(key) }
+                .joinToString("\n") { (_, message) -> context.getString(message) })
         }
 
         // ---- 1) System property set by onModuleLoaded in system_server.
